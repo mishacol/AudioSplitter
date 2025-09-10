@@ -10,6 +10,9 @@ const AudioProcessor: React.FC = () => {
   const [splitMode, setSplitMode] = useState<'automatic' | 'manual' | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isProcessed, setIsProcessed] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration] = useState(240); // 4 minutes
 
   const handleFetchAudio = async () => {
     if (!audioUrl) return;
@@ -29,6 +32,14 @@ const AudioProcessor: React.FC = () => {
       setIsProcessed(true);
       setIsProcessing(false);
     }, 3000);
+  };
+
+  const togglePlay = () => setIsPlaying(!isPlaying);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -72,43 +83,64 @@ const AudioProcessor: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Preview & Download Section */}
+          {/* Beautiful Preview & Download Section - Only shows after audio is fetched */}
           {audioFetched && (
-            <Card className="bg-gray-800 border-gray-700">
-              <CardHeader>
-                <CardTitle className="text-white">Preview & Download</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Audio Waveform Placeholder */}
-                <div className="bg-gray-700 rounded-lg p-8 text-center">
-                  <div className="h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded opacity-50 mb-4"></div>
-                  <p className="text-gray-300">Audio Waveform</p>
+            <div className="bg-gray-800 rounded-2xl p-8 border border-gray-700">
+              <h2 className="text-4xl font-bold text-white text-center mb-12">
+                Audio Preview
+              </h2>
+              
+              {/* Waveform Visualization */}
+              <div className="mb-8">
+                <div className="h-32 bg-gray-700 rounded-lg flex items-center justify-center mb-4">
+                  <img
+                    src="https://d64gsuwffb70l.cloudfront.net/68bf327081eca654cd4e6dde_1757360817366_a5a1c9ff.webp"
+                    alt="Audio waveform"
+                    className="w-full h-full object-cover rounded-lg opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* Player Controls */}
+              <div className="flex items-center justify-between mb-6">
+                <button
+                  onClick={togglePlay}
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-4 transition-colors duration-300"
+                >
+                  {isPlaying ? (
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  )}
+                </button>
+                
+                <div className="flex-1 mx-6">
+                  <div className="bg-gray-600 rounded-full h-2">
+                    <div 
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(currentTime / duration) * 100}%` }}
+                    />
+                  </div>
                 </div>
                 
-                {/* Download Options */}
-                <div className="flex gap-4 justify-center">
-                  <Button variant="outline" className="border-gray-600 text-white hover:bg-gray-700">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download MP3
-                  </Button>
-                  <Button variant="outline" className="border-gray-600 text-white hover:bg-gray-700">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download WAV
-                  </Button>
-                  <Button variant="outline" className="border-gray-600 text-white hover:bg-gray-700">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download FLAC
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                <span className="text-gray-300 text-sm">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </span>
+              </div>
+
+
+            </div>
           )}
 
           {/* Split Mode Section */}
           {audioFetched && (
             <Card className="bg-gray-800 border-gray-700">
               <CardHeader>
-                <CardTitle className="text-white">Split Mode</CardTitle>
+                <CardTitle className="text-white text-center">Split Mode</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex gap-4 justify-center">
@@ -130,25 +162,7 @@ const AudioProcessor: React.FC = () => {
                   </Button>
                 </div>
                 
-                <div className="text-center">
-                  <Button
-                    onClick={handleSplitAudio}
-                    disabled={!splitMode || isProcessing}
-                    className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                  >
-                    {isProcessing && audioFetched ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Scissors className="h-4 w-4 mr-2" />
-                        Split Audio
-                      </>
-                    )}
-                  </Button>
-                </div>
+
               </CardContent>
             </Card>
           )}
