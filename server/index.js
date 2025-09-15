@@ -1,0 +1,293 @@
+import express from 'express';
+import cors from 'cors';
+import youtubedl from 'yt-dlp-exec';
+import { Readable } from 'node:stream';
+import ffmpegPath from 'ffmpeg-static';
+import { spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
+const app = express();
+
+app.use(cors({ origin: [/^http:\/\/localhost:\d+$/] }));
+app.use(express.json());
+const pickBestProgressiveAudio = (info) => {
+  const formats = Array.isArray(info?.formats) ? info.formats : [];
+  const candidates = formats.filter((f) => {
+    const hasAudio = f.acodec && f.acodec !== 'none';
+    const noVideo = !f.vcodec || f.vcodec === 'none';
+    const url = f.url || '';
+    const protocol = (f.protocol || '').toLowerCase();
+    const ext = (f.ext || '').toLowerCase();
+    const isSegmented = protocol.includes('m3u8') || protocol.includes('dash') || url.includes('.m3u8') || url.includes('manifest');
+    const isProgressive = !isSegmented && (protocol.startsWith('http') || protocol === 'https');
+    const isPlayableExt = ['mp3', 'm4a', 'webm', 'ogg'].includes(ext);
+    return hasAudio && noVideo && url && isProgressive && (isPlayableExt || true);
+  });
+  const sorted = candidates.sort((a, b) => (Number(b.abr || 0) - Number(a.abr || 0)));
+  return sorted[0] || candidates[0];
+};
+
+const probeDurationWithFfprobe = async (url) => {
+  return new Promise((resolve) => {
+    const ffprobeCmd = process.env.FFPROBE_PATH || 'ffprobe';
+    const child = execFile(ffprobeCmd, ['-v', 'quiet', '-print_format', 'json', '-show_format', url], { timeout: 10000 }, (err, stdout) => {
+      if (err) return resolve(0);
+      try {
+        const data = JSON.parse(String(stdout || '{}'));
+        const d = parseFloat(data?.format?.duration);
+        resolve(isFinite(d) ? d : 0);
+      } catch {
+        resolve(0);
+      }
+    });
+    child.on('error', () => resolve(0));
+  });
+};
+
+const estimateHlsDurationFromManifest = async (manifestUrl) => {
+  try {
+    const resp = await fetch(manifestUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!resp.ok) return 0;
+    const text = await resp.text();
+    // Sum #EXTINF:durations
+    let total = 0;
+    const lines = text.split(/\r?\n/);
+    for (const line of lines) {
+      if (line.startsWith('#EXTINF:')) {
+        const val = parseFloat(line.substring('#EXTINF:'.length).split(',')[0]);
+        if (isFinite(val)) total += val;
+      }
+    }
+    return total || 0;
+  } catch {
+    return 0;
+  }
+};
+
+app.get('/', (_req, res) => {
+  res.type('text/plain').send('Resolver up. Use POST /resolve or GET /stream?url=...');
+});
+
+app.post('/resolve', async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    if (!url) {
+      return res.status(400).json({ error: 'Missing url' });
+    }
+
+    // Prefer JSON parsing to select the best audio-only format
+    try {
+      const referer = url;
+      const jsonStr = await youtubedl(url, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        noCheckCertificates: true,
+        preferFreeFormats: true,
+        noPlaylist: true,
+        addHeader: [
+          `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+          `Referer: ${referer}`,
+        ],
+      });
+      const info = JSON.parse(String(jsonStr));
+      const chosen = pickBestProgressiveAudio(info);
+      if (chosen?.url) {
+        let durationVal = info?.duration || null;
+        if (!durationVal) {
+          try {
+            durationVal = await probeDurationWithFfprobe(chosen.url);
+          } catch {}
+        }
+        return res.json({ url: chosen.url, duration: durationVal || null, title: info?.title || null, is_progressive: true });
+      }
+      // Return duration even if we couldn't choose a progressive URL
+      let durationOnly = info?.duration || 0;
+      if (!durationOnly) {
+        // Try to find an HLS format and estimate from manifest
+        const formats = Array.isArray(info?.formats) ? info.formats : [];
+        const hls = formats.find((f) => (f?.url || '').includes('.m3u8'));
+        if (hls?.url) {
+          durationOnly = await estimateHlsDurationFromManifest(hls.url);
+        }
+      }
+      if (durationOnly) {
+        return res.json({ url: null, duration: durationOnly, title: info?.title || null, is_progressive: false });
+      }
+    } catch (e) {
+      // fall through to -g method
+    }
+
+    // Fallback to -g (direct URL to bestaudio)
+    try {
+      const referer = url;
+      const stdout = await youtubedl(url, {
+        f: 'bestaudio',
+        g: true,
+        addHeader: [
+          `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+          `Referer: ${referer}`,
+        ],
+      });
+      const directUrl = String(stdout).trim().split('\n').pop();
+      if (directUrl) {
+        const looksSegmented = /m3u8|mpd|dash|manifest/i.test(directUrl);
+        if (looksSegmented) {
+          // Estimate duration from HLS manifest if possible
+          const est = await estimateHlsDurationFromManifest(directUrl);
+          return res.json({ url: directUrl, duration: est || null, title: null, is_progressive: false });
+        }
+        // Progressive: try to probe duration
+        const probed = await probeDurationWithFfprobe(directUrl);
+        return res.json({ url: directUrl, duration: probed || null, title: null, is_progressive: true });
+      }
+    } catch (e) {
+      // ignore, handled below
+    }
+
+    return res.status(422).json({ error: 'Unable to resolve media URL' });
+  } catch (err) {
+    console.error('resolve error', err);
+    return res.status(500).json({ error: 'Resolver failed' });
+  }
+});
+
+// Streaming proxy fallback: transcode best audio to mp3 and pipe
+app.get('/stream', async (req, res) => {
+  console.log('GET /stream query:', req.query);
+  const sourceUrl = typeof req.query.url === 'string' && req.query.url
+    ? req.query.url
+    : (typeof req.query.u === 'string' ? req.query.u : '');
+  if (typeof sourceUrl !== 'string' || !sourceUrl) {
+    return res.status(400).json({ error: 'Missing url' });
+  }
+  try {
+    // Resolve to a direct audio URL first
+    let directUrl = '';
+    try {
+      const jsonStr = await youtubedl(sourceUrl, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        noCheckCertificates: true,
+        preferFreeFormats: true,
+        noPlaylist: true,
+        addHeader: [
+          `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+          `Referer: ${sourceUrl}`,
+        ],
+      });
+      const info = JSON.parse(String(jsonStr));
+      const chosen = pickBestProgressiveAudio(info);
+      if (chosen?.url) directUrl = chosen.url;
+    } catch {}
+    if (!directUrl) {
+      try {
+        const stdout = await youtubedl(sourceUrl, {
+          f: 'bestaudio',
+          g: true,
+          addHeader: [
+            `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+            `Referer: ${sourceUrl}`,
+          ],
+        });
+        directUrl = String(stdout).trim().split('\n').pop() || '';
+      } catch {}
+    }
+    if (!directUrl) {
+      return res.status(422).json({ error: 'Unable to resolve media URL' });
+    }
+
+    // If segmented (HLS/DASH), transcode to progressive MP3 via ffmpeg
+    const looksSegmented = /m3u8|manifest|dash|\.mpd/.test(directUrl);
+    if (looksSegmented && ffmpegPath) {
+      res.status(200);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Timing-Allow-Origin', '*');
+      res.setHeader('Content-Disposition', 'inline; filename="stream.mp3"');
+      const ff = spawn(ffmpegPath, [
+        '-hide_banner', '-loglevel', 'error',
+        '-headers', `User-Agent: Mozilla/5.0\r\nReferer: ${sourceUrl}\r\n`,
+        '-i', directUrl,
+        '-vn', '-acodec', 'libmp3lame', '-b:a', '192k',
+        '-f', 'mp3', '-'
+      ]);
+      ff.stdout.pipe(res);
+      ff.stderr.on('data', () => {});
+      ff.on('error', () => { if (!res.headersSent) res.status(500); res.end(); });
+      ff.on('close', () => res.end());
+      return;
+    }
+
+    // Proxy the direct URL and forward Range header for seeking
+    const range = req.headers['range'];
+    const upstream = await fetch(directUrl, {
+      method: 'GET',
+      headers: {
+        ...(range ? { Range: range } : {}),
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': sourceUrl,
+      },
+    });
+
+    // Forward critical headers but prefer inline playback
+    res.status(upstream.status);
+    let contentType = upstream.headers.get('content-type');
+    const contentLength = upstream.headers.get('content-length');
+    const acceptRanges = upstream.headers.get('accept-ranges');
+    const contentRange = upstream.headers.get('content-range');
+    let contentDisposition = upstream.headers.get('content-disposition') || '';
+
+    // Force an audio content-type for inline playback if upstream is generic
+    if (!contentType || !/^audio\//i.test(contentType)) {
+      contentType = 'audio/mpeg';
+    }
+    res.setHeader('Content-Type', contentType);
+    if (contentLength) res.setHeader('Content-Length', contentLength);
+    if (acceptRanges) res.setHeader('Accept-Ranges', acceptRanges);
+    if (contentRange) res.setHeader('Content-Range', contentRange);
+    res.setHeader('Cache-Control', upstream.headers.get('cache-control') || 'no-store');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Timing-Allow-Origin', '*');
+    // Force inline playback to avoid browser download prompts
+    // Always prefer inline; some sources force attachment
+    const ext = (contentType && contentType.includes('mp4')) ? 'm4a' : (contentType && contentType.includes('ogg') ? 'ogg' : 'mp3');
+    contentDisposition = `inline; filename="stream.${ext}"`;
+    res.setHeader('Content-Disposition', contentDisposition);
+    // Ensure range support header exists for seeking
+    if (!acceptRanges) res.setHeader('Accept-Ranges', 'bytes');
+    // Help Chrome treat this as cross-origin media resource
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+    if (upstream.body) {
+      try {
+        const nodeStream = Readable.fromWeb(upstream.body);
+        nodeStream.on('error', () => {
+          if (!res.headersSent) res.status(500);
+          res.end();
+        });
+        nodeStream.pipe(res);
+      } catch {
+        // Fallback for older Node versions
+        // @ts-ignore
+        const anyBody = upstream.body;
+        if (typeof anyBody?.pipe === 'function') {
+          anyBody.pipe(res);
+        } else {
+          const buf = Buffer.from(await upstream.arrayBuffer());
+          res.end(buf);
+        }
+      }
+    } else {
+      res.end();
+    }
+  } catch (e) {
+    return res.status(500).json({ error: 'Stream failed' });
+  }
+});
+
+const port = process.env.PORT || 3001;
+app.listen(port, () => {
+  console.log(`Resolver server listening on http://localhost:${port}`);
+});
+
+

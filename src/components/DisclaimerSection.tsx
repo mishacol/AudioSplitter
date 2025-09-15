@@ -19,7 +19,7 @@ const DisclaimerSection: React.FC = () => {
             {/* Disclaimer content */}
             <div className="space-y-4 text-gray-300">
               <p>
-                <span className="font-semibold text-white"></span> Qronosound is a tool provided for educational and personal use only. Users are solely responsible for ensuring they have the legal right to download, process, and distribute any audio content. We do not condone or support copyright infringement.
+                <span className="font-semibold text-white"></span> QronoSound is a tool provided for educational and personal use only. Users are solely responsible for ensuring they have the legal right to download, process, and distribute any audio content. We do not condone or support copyright infringement.
               </p>
               
               <p>
