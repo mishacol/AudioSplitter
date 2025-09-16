@@ -22,10 +22,6 @@ const AudioProcessor: React.FC = () => {
   const [volume, setVolume] = useState(1);
   const [splitPoints, setSplitPoints] = useState<number[]>([]);
   const [splitSegments, setSplitSegments] = useState<any[]>([]);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
-  const [isLoadingAudioBlob, setIsLoadingAudioBlob] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
 
   const isStreamingPlatformUrl = (url: string) => {
@@ -68,26 +64,6 @@ const AudioProcessor: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Cleanup blob URL on unmount
-  useEffect(() => {
-    return () => {
-      if (audioBlobUrl) {
-        URL.revokeObjectURL(audioBlobUrl);
-      }
-    };
-  }, [audioBlobUrl]);
-
-  // Reset blob when switching modes and auto-load for manual split
-  useEffect(() => {
-    if (splitMode !== 'manual' && audioBlobUrl) {
-      URL.revokeObjectURL(audioBlobUrl);
-      setAudioBlobUrl(null);
-      setAudioBlob(null);
-    } else if (splitMode === 'manual' && !audioBlobUrl && audioFetched && audioUrl) {
-      // Auto-load audio when switching to manual split mode
-      downloadAudioToMemory();
-    }
-  }, [splitMode, audioBlobUrl, audioFetched, audioUrl]);
 
   const attachAudioListeners = () => {
     const audio = audioRef.current;
@@ -279,94 +255,6 @@ const AudioProcessor: React.FC = () => {
     setSplitPoints([]);
   };
 
-  const downloadAudioToMemory = async () => {
-    if (!audioUrl || isLoadingAudioBlob) return;
-    
-    setIsLoadingAudioBlob(true);
-    setUploadProgress(0);
-    
-    try {
-      // Clean up previous blob URL if it exists
-      if (audioBlobUrl) {
-        URL.revokeObjectURL(audioBlobUrl);
-        setAudioBlobUrl(null);
-      }
-
-      // Download audio as blob with progress tracking
-      const response = await fetch(`http://localhost:3001/stream?url=${encodeURIComponent(audioUrl)}`);
-      if (!response.ok) {
-        throw new Error('Failed to download audio');
-      }
-      
-      const contentLength = response.headers.get('content-length');
-      const total = contentLength ? parseInt(contentLength, 10) : 0;
-      let loaded = 0;
-      const chunks: Uint8Array[] = [];
-      
-      // Read the response body
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body reader available');
-      }
-      
-      // If we can't get content length, simulate progress
-      if (total === 0) {
-        // Simulate progress for streaming responses
-        const progressInterval = setInterval(() => {
-          setUploadProgress(prev => {
-            if (prev >= 90) {
-              clearInterval(progressInterval);
-              return 90; // Stop at 90% until actual completion
-            }
-            return Math.floor(prev + Math.random() * 10);
-          });
-        }, 200);
-        
-        // Read the response
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          chunks.push(value);
-          loaded += value.length;
-        }
-        
-        // Complete the progress
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-      } else {
-        // Real progress tracking for responses with content-length
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          chunks.push(value);
-          loaded += value.length;
-          
-          const progress = Math.round((loaded / total) * 100);
-          setUploadProgress(progress);
-        }
-      }
-      
-      const blob = new Blob(chunks);
-      const blobUrl = URL.createObjectURL(blob);
-      
-      setAudioBlob(blob);
-      setAudioBlobUrl(blobUrl);
-      setUploadProgress(100);
-      
-      toast({ 
-        title: '🎵 Audio Ready!', 
-        description: 'Your audio is now loaded and ready for manual splitting.',
-        className: 'bg-green-900 border-green-700 text-green-100'
-      });
-    } catch (error) {
-      console.error('Error downloading audio:', error);
-      toast({ title: 'Download failed', description: 'Could not load audio for editing.', variant: 'destructive' as any });
-    } finally {
-      setIsLoadingAudioBlob(false);
-    }
-  };
 
   return (
     <div id="audio-processor" className="bg-gray-900 py-20">
@@ -467,7 +355,7 @@ const AudioProcessor: React.FC = () => {
                       <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
                       <div className="text-center">
                         <p className="text-white text-lg font-medium">Fetching Audio...</p>
-                        <p className="text-gray-300 text-sm mt-2">Please wait while we process your audio file</p>
+                        <p className="text-gray-300 text-sm mt-2">Please wait while we process your audio file. Long tracks may take several minutes to fetch</p>
                       </div>
                     </div>
                   ) : (
@@ -602,91 +490,70 @@ const AudioProcessor: React.FC = () => {
                 {/* Manual Split Controls */}
                 {splitMode === 'manual' && (
                   <div className="space-y-4">
-                    {isLoadingAudioBlob ? (
-                      <div className="text-center">
-                        <Loader2 className="h-8 w-8 text-blue-500 animate-spin mx-auto mb-4" />
-                        <p className="text-gray-300">Uploading... {uploadProgress}%</p>
-                        <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${uploadProgress}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    ) : audioBlobUrl ? (
-                      <div className="space-y-4">
-                        <div className="text-center">
-                          <p className="text-green-400 mb-2">
-                            ✅ Audio loaded and is ready for editing.
-                          </p>
-                          <p className="text-gray-300 text-sm mb-4">
-                            Use the expandable frame to select your desired audio segment • Adjust start/end times precisely • Import your selection • Save in desired format
-                          </p>
-                        </div>
-                        
-                        {/* Manual Split Editor */}
-                        <ManualSplitEditor
-                          audioBlobUrl={audioBlobUrl}
-                          duration={duration}
-                          onExport={async (startTime, endTime, format) => {
-                            try {
-                              // Generate filename
-                              const startTimeStr = formatTime(startTime).replace(/:/g, '-');
-                              const endTimeStr = formatTime(endTime).replace(/:/g, '-');
-                              const filename = `audio_selection_${startTimeStr}_to_${endTimeStr}.${format}`;
-                              
-                              // Call backend to create audio segment in selected format
-                              const response = await fetch('http://localhost:3001/split', {
-                                method: 'POST',
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                  url: audioUrl,
-                                  splitPoints: [endTime], // Single segment from 0 to endTime
-                                  format: format,
-                                  startTime: startTime // Add start time for the segment
-                                }),
-                              });
-                              
-                              if (!response.ok) {
-                                throw new Error('Failed to create audio segment');
-                              }
-                              
-                              // Get the audio blob
-                              const audioBlob = await response.blob();
-                              
-                              // Create file save dialog
-                              const link = document.createElement('a');
-                              link.href = URL.createObjectURL(audioBlob);
-                              link.download = filename;
-                              link.style.display = 'none';
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                              
-                              // Clean up the blob URL
-                              URL.revokeObjectURL(link.href);
-                              
-                              toast({ 
-                                title: '💾 File Saved!', 
-                                description: `Audio segment saved as ${filename}`,
-                                className: 'bg-blue-900 border-blue-700 text-blue-100'
-                              });
-                            } catch (error) {
-                              console.error('Error saving file:', error);
-                              // Show custom error popup instead of toast
-                              setShowErrorPopup(true);
-                            }
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <div className="text-center">
-                        <p className="text-gray-300">Preparing audio for editing...</p>
-                      </div>
-                    )}
-
+                    <div className="text-center">
+                      <p className="text-green-400 mb-2">
+                        ✅ Audio ready for editing!
+                      </p>
+                      <p className="text-gray-300 text-sm mb-4">
+                        Use WaveSurfer.js to create regions and export your selections
+                      </p>
+                    </div>
+                    
+                    {/* Manual Split Editor */}
+                    <ManualSplitEditor
+                      audioUrl={audioUrl}
+                      duration={duration}
+                      onExport={async (startTime, endTime, format) => {
+                        try {
+                          // Generate filename
+                          const startTimeStr = formatTime(startTime).replace(/:/g, '-');
+                          const endTimeStr = formatTime(endTime).replace(/:/g, '-');
+                          const filename = `audio_selection_${startTimeStr}_to_${endTimeStr}.${format}`;
+                          
+                          // Call backend to create audio segment in selected format (streaming approach)
+                          const response = await fetch('http://localhost:3001/split', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                              url: audioUrl,
+                              format: format,
+                              startTime: startTime,
+                              endTime: endTime
+                            }),
+                          });
+                          
+                          if (!response.ok) {
+                            throw new Error('Failed to create audio segment');
+                          }
+                          
+                          // Get the audio blob
+                          const audioBlob = await response.blob();
+                          
+                          // Create file save dialog
+                          const link = document.createElement('a');
+                          link.href = URL.createObjectURL(audioBlob);
+                          link.download = filename;
+                          link.style.display = 'none';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          
+                          // Clean up the blob URL
+                          URL.revokeObjectURL(link.href);
+                          
+                          toast({ 
+                            title: '💾 File Saved!', 
+                            description: `Audio segment saved as ${filename}`,
+                            className: 'bg-blue-900 border-blue-700 text-blue-100'
+                          });
+                        } catch (error) {
+                          console.error('Error saving file:', error);
+                          setShowErrorPopup(true);
+                        }
+                      }}
+                    />
                   </div>
                 )}
 

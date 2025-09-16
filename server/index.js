@@ -12,6 +12,109 @@ const app = express();
 
 app.use(cors({ origin: [/^http:\/\/localhost:\d+$/] }));
 app.use(express.json());
+
+// Streaming single segment extraction (no temp files, no browser download)
+const handleSingleSegmentExtraction = async (req, res, url, startTime, endTime, format) => {
+  try {
+    // Get direct audio URL
+    let directUrl = '';
+    try {
+      const jsonStr = await youtubedl(url, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        noCheckCertificates: true,
+        preferFreeFormats: true,
+        noPlaylist: true,
+        timeout: 30000,
+        addHeader: [
+          `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+          `Referer: ${url}`,
+        ],
+      });
+      const info = JSON.parse(String(jsonStr));
+      const chosen = pickBestProgressiveAudio(info);
+      if (chosen?.url) directUrl = chosen.url;
+    } catch {}
+    
+    if (!directUrl) {
+      try {
+        const stdout = await youtubedl(url, {
+          f: 'bestaudio',
+          g: true,
+          timeout: 30000,
+          addHeader: [
+            `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+            `Referer: ${url}`,
+          ],
+        });
+        directUrl = String(stdout).trim().split('\n').pop() || '';
+      } catch {}
+    }
+    
+    if (!directUrl) {
+      return res.status(422).json({ error: 'Unable to resolve audio URL' });
+    }
+
+    // Stream the segment directly to browser (no temp files!)
+    const segmentDuration = endTime - startTime;
+    const filename = `audio_selection_${startTime.toFixed(1)}_to_${endTime.toFixed(1)}.${format}`;
+    
+    res.setHeader('Content-Type', `audio/${format}`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    
+    // Use ffmpeg to stream segment directly
+    let ffmpegArgs = [
+      '-hide_banner', '-loglevel', 'error',
+      '-headers', `User-Agent: Mozilla/5.0\r\nReferer: ${url}\r\n`,
+      '-i', directUrl,
+      '-ss', startTime.toString(),
+      '-t', segmentDuration.toString(),
+      '-vn'
+    ];
+
+    // Set appropriate codec and format
+    if (format === 'mp3') {
+      ffmpegArgs.push('-acodec', 'libmp3lame', '-b:a', '192k', '-f', 'mp3');
+    } else if (format === 'wav') {
+      ffmpegArgs.push('-acodec', 'pcm_s16le', '-f', 'wav');
+    } else if (format === 'flac') {
+      ffmpegArgs.push('-acodec', 'flac', '-f', 'flac');
+    } else {
+      ffmpegArgs.push('-acodec', 'copy', '-f', format);
+    }
+
+    ffmpegArgs.push('-'); // Output to stdout
+
+    const ffmpeg = spawn(ffmpegPath, ffmpegArgs);
+    
+    ffmpeg.stdout.pipe(res);
+    ffmpeg.stderr.on('data', () => {}); // Suppress stderr
+    
+    ffmpeg.on('error', (error) => {
+      console.error('ffmpeg error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Audio processing failed' });
+      }
+    });
+    
+    ffmpeg.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`ffmpeg exited with code ${code}`);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Audio processing failed' });
+        }
+      }
+      res.end();
+    });
+    
+  } catch (error) {
+    console.error('Single segment extraction error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Audio processing failed', details: error.message });
+    }
+  }
+};
 const pickBestProgressiveAudio = (info) => {
   const formats = Array.isArray(info?.formats) ? info.formats : [];
   const candidates = formats.filter((f) => {
@@ -86,6 +189,7 @@ app.post('/resolve', async (req, res) => {
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
+        timeout: 30000, // 30 second timeout
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${referer}`,
@@ -125,6 +229,7 @@ app.post('/resolve', async (req, res) => {
       const stdout = await youtubedl(url, {
         f: 'bestaudio',
         g: true,
+        timeout: 30000, // 30 second timeout
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${referer}`,
@@ -172,6 +277,7 @@ app.get('/stream', async (req, res) => {
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
+        timeout: 30000, // 30 second timeout
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${sourceUrl}`,
@@ -186,6 +292,7 @@ app.get('/stream', async (req, res) => {
         const stdout = await youtubedl(sourceUrl, {
           f: 'bestaudio',
           g: true,
+          timeout: 30000, // 30 second timeout
           addHeader: [
             `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
             `Referer: ${sourceUrl}`,
@@ -288,12 +395,17 @@ app.get('/stream', async (req, res) => {
   }
 });
 
-// Manual audio splitting endpoint
+// Manual audio splitting endpoint - streaming approach
 app.post('/split', async (req, res) => {
   try {
-    const { url, splitPoints, format = 'mp3', startTime: customStartTime } = req.body || {};
+    const { url, splitPoints, format = 'mp3', startTime: customStartTime, endTime: customEndTime } = req.body || {};
     
-    console.log('Split request:', { url, splitPoints, format, customStartTime });
+    console.log('Split request:', { url, splitPoints, format, customStartTime, customEndTime });
+    
+    // Handle single segment extraction (manual split mode)
+    if (customStartTime !== undefined && customEndTime !== undefined) {
+      return await handleSingleSegmentExtraction(req, res, url, customStartTime, customEndTime, format);
+    }
     
     if (!url || !Array.isArray(splitPoints) || splitPoints.length === 0) {
       return res.status(400).json({ error: 'Missing url or splitPoints array' });
@@ -317,6 +429,7 @@ app.post('/split', async (req, res) => {
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
+        timeout: 30000, // 30 second timeout
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${url}`,
