@@ -5,6 +5,9 @@ import { Readable } from 'node:stream';
 import ffmpegPath from 'ffmpeg-static';
 import { spawn } from 'node:child_process';
 import { execFile } from 'node:child_process';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 const app = express();
 
 app.use(cors({ origin: [/^http:\/\/localhost:\d+$/] }));
@@ -282,6 +285,173 @@ app.get('/stream', async (req, res) => {
     }
   } catch (e) {
     return res.status(500).json({ error: 'Stream failed' });
+  }
+});
+
+// Manual audio splitting endpoint
+app.post('/split', async (req, res) => {
+  try {
+    const { url, splitPoints, format = 'mp3' } = req.body || {};
+    
+    if (!url || !Array.isArray(splitPoints) || splitPoints.length === 0) {
+      return res.status(400).json({ error: 'Missing url or splitPoints array' });
+    }
+
+    // Validate split points (should be numbers between 0 and duration)
+    const validSplitPoints = splitPoints.filter(point => 
+      typeof point === 'number' && point >= 0 && isFinite(point)
+    ).sort((a, b) => a - b);
+
+    if (validSplitPoints.length === 0) {
+      return res.status(400).json({ error: 'No valid split points provided' });
+    }
+
+    // Get audio info first to validate duration
+    let audioInfo;
+    try {
+      const jsonStr = await youtubedl(url, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        noCheckCertificates: true,
+        preferFreeFormats: true,
+        noPlaylist: true,
+        addHeader: [
+          `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+          `Referer: ${url}`,
+        ],
+      });
+      audioInfo = JSON.parse(String(jsonStr));
+    } catch (e) {
+      return res.status(422).json({ error: 'Unable to resolve audio URL' });
+    }
+
+    const duration = audioInfo?.duration || 0;
+    if (duration === 0) {
+      return res.status(422).json({ error: 'Unable to determine audio duration' });
+    }
+
+    // Filter out split points beyond duration
+    const finalSplitPoints = validSplitPoints.filter(point => point < duration);
+    if (finalSplitPoints.length === 0) {
+      return res.status(400).json({ error: 'All split points are beyond audio duration' });
+    }
+
+    // Get the best audio URL
+    const chosen = pickBestProgressiveAudio(audioInfo);
+    if (!chosen?.url) {
+      return res.status(422).json({ error: 'Unable to get audio URL for splitting' });
+    }
+
+    const audioUrl = chosen.url;
+    const segments = [];
+    const tempFiles = [];
+
+    try {
+      // Create segments based on split points
+      for (let i = 0; i < finalSplitPoints.length + 1; i++) {
+        const startTime = i === 0 ? 0 : finalSplitPoints[i - 1];
+        const endTime = i === finalSplitPoints.length ? duration : finalSplitPoints[i];
+        
+        if (startTime >= endTime) continue; // Skip invalid segments
+
+        const segmentDuration = endTime - startTime;
+        const tempFile = join(tmpdir(), `segment_${Date.now()}_${i}.${format}`);
+        tempFiles.push(tempFile);
+
+        // Use ffmpeg to extract segment
+        await new Promise((resolve, reject) => {
+          const ffmpeg = spawn(ffmpegPath, [
+            '-hide_banner', '-loglevel', 'error',
+            '-headers', `User-Agent: Mozilla/5.0\r\nReferer: ${url}\r\n`,
+            '-i', audioUrl,
+            '-ss', startTime.toString(),
+            '-t', segmentDuration.toString(),
+            '-vn', '-acodec', format === 'mp3' ? 'libmp3lame' : 'copy',
+            '-b:a', '192k',
+            '-f', format,
+            tempFile
+          ]);
+
+          ffmpeg.on('close', (code) => {
+            if (code === 0) {
+              resolve();
+            } else {
+              reject(new Error(`ffmpeg exited with code ${code}`));
+            }
+          });
+
+          ffmpeg.on('error', reject);
+        });
+
+        segments.push({
+          index: i + 1,
+          startTime,
+          endTime,
+          duration: segmentDuration,
+          filename: `segment_${i + 1}.${format}`,
+          tempPath: tempFile
+        });
+      }
+
+      // Send segments as zip or individual files
+      if (segments.length === 1) {
+        // Single segment - send directly
+        const segment = segments[0];
+        res.setHeader('Content-Type', `audio/${format}`);
+        res.setHeader('Content-Disposition', `attachment; filename="${segment.filename}"`);
+        res.sendFile(segment.tempPath, (err) => {
+          if (err) console.error('Error sending file:', err);
+          // Clean up temp file
+          try { unlinkSync(segment.tempPath); } catch {}
+        });
+      } else {
+        // Multiple segments - return metadata for frontend to download individually
+        res.json({
+          success: true,
+          segments: segments.map(seg => ({
+            index: seg.index,
+            startTime: seg.startTime,
+            endTime: seg.endTime,
+            duration: seg.duration,
+            filename: seg.filename,
+            downloadUrl: `/download-segment/${Buffer.from(seg.tempPath).toString('base64')}`
+          }))
+        });
+      }
+
+    } catch (error) {
+      // Clean up temp files on error
+      tempFiles.forEach(file => {
+        try { unlinkSync(file); } catch {}
+      });
+      throw error;
+    }
+
+  } catch (err) {
+    console.error('Split error:', err);
+    return res.status(500).json({ error: 'Audio splitting failed' });
+  }
+});
+
+// Download individual segment endpoint
+app.get('/download-segment/:encodedPath', (req, res) => {
+  try {
+    const encodedPath = req.params.encodedPath;
+    const tempPath = Buffer.from(encodedPath, 'base64').toString();
+    
+    res.download(tempPath, (err) => {
+      if (err) {
+        console.error('Download error:', err);
+        if (!res.headersSent) {
+          res.status(404).json({ error: 'File not found' });
+        }
+      }
+      // Clean up temp file after download
+      try { unlinkSync(tempPath); } catch {}
+    });
+  } catch (err) {
+    console.error('Download segment error:', err);
+    res.status(500).json({ error: 'Download failed' });
   }
 });
 

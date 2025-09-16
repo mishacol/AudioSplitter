@@ -19,6 +19,8 @@ const AudioProcessor: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [hasTriedStreamFallback, setHasTriedStreamFallback] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [splitPoints, setSplitPoints] = useState<number[]>([]);
+  const [splitSegments, setSplitSegments] = useState<any[]>([]);
 
   const isStreamingPlatformUrl = (url: string) => {
     try {
@@ -131,7 +133,7 @@ const AudioProcessor: React.FC = () => {
         // Immediately route playback through our proxy to avoid CORS, and fetch metadata in background
         loadUrl = `http://localhost:3001/stream?url=${encodeURIComponent(audioUrl)}`;
         setHasTriedStreamFallback(true);
-      setAudioFetched(true);
+        // Don't set audioFetched=true immediately - let the audio events handle it
         // Fire and forget duration resolve; do not flip UI back if it fails
         resolveStreamingUrl(audioUrl).then((resolved) => {
           if (resolved?.duration && resolved.duration > 0) {
@@ -151,13 +153,49 @@ const AudioProcessor: React.FC = () => {
   };
 
   const handleSplitAudio = async () => {
-    if (!splitMode) return;
+    if (!splitMode || !audioUrl) return;
     setIsProcessing(true);
-    // Simulate processing
-    setTimeout(() => {
-      setIsProcessed(true);
+    
+    try {
+      if (splitMode === 'manual') {
+        if (splitPoints.length === 0) {
+          toast({ title: 'No split points', description: 'Please add at least one split point.', variant: 'destructive' as any });
+          setIsProcessing(false);
+          return;
+        }
+        
+        const response = await fetch('http://localhost:3001/split', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            url: audioUrl, 
+            splitPoints: splitPoints.sort((a, b) => a - b),
+            format: 'mp3'
+          }),
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Splitting failed');
+        }
+        
+        const result = await response.json();
+        setSplitSegments(result.segments || []);
+        setIsProcessed(true);
+        toast({ title: 'Audio split successfully', description: `Created ${result.segments?.length || 1} segments.` });
+      } else {
+        // Automatic splitting - simulate for now
+        setTimeout(() => {
+          setIsProcessed(true);
+          setIsProcessing(false);
+        }, 3000);
+      }
+    } catch (error) {
+      console.error('Split error:', error);
+      toast({ title: 'Split failed', description: error.message || 'Failed to split audio', variant: 'destructive' as any });
+    } finally {
       setIsProcessing(false);
-    }, 3000);
+    }
   };
 
   const togglePlay = async () => {
@@ -198,6 +236,20 @@ const AudioProcessor: React.FC = () => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const addSplitPoint = () => {
+    if (currentTime > 0 && currentTime < duration && !splitPoints.includes(currentTime)) {
+      setSplitPoints([...splitPoints, currentTime].sort((a, b) => a - b));
+    }
+  };
+
+  const removeSplitPoint = (index: number) => {
+    setSplitPoints(splitPoints.filter((_, i) => i !== index));
+  };
+
+  const clearSplitPoints = () => {
+    setSplitPoints([]);
   };
 
   return (
@@ -284,8 +336,8 @@ const AudioProcessor: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Beautiful Preview & Download Section - Only shows after audio is fetched */}
-          {audioFetched && (
+          {/* Beautiful Preview & Download Section - Shows loading state or after audio is fetched */}
+          {(isProcessing || audioFetched) && (
             <div className="bg-gray-800 rounded-2xl p-8 border border-gray-700">
               <h2 className="text-4xl font-bold text-white text-center mb-12">
                 Audio Preview
@@ -294,11 +346,21 @@ const AudioProcessor: React.FC = () => {
               {/* Waveform Visualization */}
               <div className="mb-8">
                 <div className="h-32 bg-gray-700 rounded-lg flex items-center justify-center mb-4">
-                  <img
-                    src="https://d64gsuwffb70l.cloudfront.net/68bf327081eca654cd4e6dde_1757360817366_a5a1c9ff.webp"
-                    alt="Audio waveform"
-                    className="w-full h-full object-cover rounded-lg opacity-60"
-                  />
+                  {isProcessing && !audioFetched ? (
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+                      <div className="text-center">
+                        <p className="text-white text-lg font-medium">Fetching Audio...</p>
+                        <p className="text-gray-300 text-sm mt-2">Please wait while we process your audio file</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <img
+                      src="https://d64gsuwffb70l.cloudfront.net/68bf327081eca654cd4e6dde_1757360817366_a5a1c9ff.webp"
+                      alt="Audio waveform"
+                      className="w-full h-full object-cover rounded-lg opacity-60"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -306,9 +368,16 @@ const AudioProcessor: React.FC = () => {
               <div className="flex items-center justify-between mb-6 gap-4">
                 <button
                   onClick={togglePlay}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-4 transition-colors duration-300"
+                  disabled={isProcessing && !audioFetched}
+                  className={`rounded-full p-4 transition-colors duration-300 ${
+                    isProcessing && !audioFetched 
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                  }`}
                 >
-                  {isPlaying ? (
+                  {isProcessing && !audioFetched ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : isPlaying ? (
                     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
                     </svg>
@@ -320,7 +389,14 @@ const AudioProcessor: React.FC = () => {
                 </button>
                 
                 <div className="flex-1 mx-6">
-                  <div className="bg-gray-600 rounded-full h-2 cursor-pointer" onClick={handleSeek}>
+                  <div 
+                    className={`rounded-full h-2 ${
+                      isProcessing && !audioFetched 
+                        ? 'bg-gray-600 cursor-not-allowed' 
+                        : 'bg-gray-600 cursor-pointer'
+                    }`} 
+                    onClick={isProcessing && !audioFetched ? undefined : handleSeek}
+                  >
                     <div 
                       className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
@@ -334,8 +410,34 @@ const AudioProcessor: React.FC = () => {
 
                 {/* Volume */}
                 <div className="flex items-center gap-2 w-40">
-                  <svg className="w-5 h-5 text-gray-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <svg className={`w-5 h-5 ${isProcessing && !audioFetched ? 'text-gray-500' : 'text-gray-300'}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    {/* Speaker base */}
                     <path d="M5 9v6h4l5 4V5L9 9H5z"/>
+                    {/* Curvy volume level waves */}
+                    {volume > 0 && (
+                      <path 
+                        d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
+                        className="opacity-60"
+                      />
+                    )}
+                    {volume > 0.3 && (
+                      <path 
+                        d="M17 8c0-1.1.9-2 2-2s2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V8z" 
+                        className="opacity-70"
+                      />
+                    )}
+                    {volume > 0.6 && (
+                      <path 
+                        d="M18 6c0-1.1.9-2 2-2s2 .9 2 2v12c0 1.1-.9 2-2 2s-2-.9-2-2V6z" 
+                        className="opacity-80"
+                      />
+                    )}
+                    {volume > 0.8 && (
+                      <path 
+                        d="M19 4c0-1.1.9-2 2-2s2 .9 2 2v16c0 1.1-.9 2-2 2s-2-.9-2-2V4z" 
+                        className="opacity-90"
+                      />
+                    )}
                   </svg>
                   <input
                     type="range"
@@ -344,7 +446,8 @@ const AudioProcessor: React.FC = () => {
                     step={0.01}
                     value={volume}
                     onChange={(e) => handleVolume(parseFloat(e.target.value))}
-                    className="w-full accent-blue-500"
+                    disabled={isProcessing && !audioFetched}
+                    className={`w-full ${isProcessing && !audioFetched ? 'opacity-50 cursor-not-allowed' : 'accent-blue-500'}`}
                     aria-label="Volume"
                   />
                 </div>
@@ -379,7 +482,104 @@ const AudioProcessor: React.FC = () => {
                     Manual Split
                   </Button>
                 </div>
-                
+
+                {/* Manual Split Controls */}
+                {splitMode === 'manual' && (
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <p className="text-gray-300 mb-4">
+                        Play the audio and click "Add Split Point" at the desired locations
+                      </p>
+                      <div className="flex gap-2 justify-center">
+                        <Button
+                          onClick={addSplitPoint}
+                          disabled={!audioFetched || currentTime === 0}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Add Split Point at {formatTime(currentTime)}
+                        </Button>
+                        <Button
+                          onClick={clearSplitPoints}
+                          variant="outline"
+                          disabled={splitPoints.length === 0}
+                        >
+                          Clear All
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Split Points List */}
+                    {splitPoints.length > 0 && (
+                      <div className="bg-gray-700 rounded-lg p-4">
+                        <h4 className="text-white font-medium mb-3">Split Points:</h4>
+                        <div className="space-y-2">
+                          {splitPoints.map((point, index) => (
+                            <div key={index} className="flex items-center justify-between bg-gray-600 rounded px-3 py-2">
+                              <span className="text-gray-300">
+                                Split {index + 1}: {formatTime(point)}
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => removeSplitPoint(index)}
+                                className="text-red-400 hover:text-red-300"
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Split Button */}
+                    <div className="text-center">
+                      <Button
+                        onClick={handleSplitAudio}
+                        disabled={isProcessing || splitPoints.length === 0}
+                        className="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Splitting Audio...
+                          </>
+                        ) : (
+                          <>
+                            <Scissors className="h-4 w-4 mr-2" />
+                            Split Audio ({splitPoints.length + 1} segments)
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Automatic Split Controls */}
+                {splitMode === 'automatic' && (
+                  <div className="text-center">
+                    <p className="text-gray-300 mb-4">
+                      Automatic splitting will detect silence and create segments automatically
+                    </p>
+                    <Button
+                      onClick={handleSplitAudio}
+                      disabled={isProcessing}
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Analyzing Audio...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="h-4 w-4 mr-2" />
+                          Auto Split Audio
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
 
               </CardContent>
             </Card>
@@ -393,28 +593,38 @@ const AudioProcessor: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {['Track 1', 'Track 2', 'Track 3'].map((track, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-gray-700/50 rounded-lg">
-                      <div>
-                        <h4 className="text-white font-medium">{track}</h4>
-                        <p className="text-gray-400 text-sm">Duration: {30 + index * 15}s</p>
+                  {splitSegments.length > 0 ? (
+                    splitSegments.map((segment, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 bg-gray-700/50 rounded-lg">
+                        <div>
+                          <h4 className="text-white font-medium">Segment {segment.index}</h4>
+                          <p className="text-gray-400 text-sm">
+                            {formatTime(segment.startTime)} - {formatTime(segment.endTime)} 
+                            ({formatTime(segment.duration)})
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = `http://localhost:3001${segment.downloadUrl}`;
+                              link.download = segment.filename;
+                              link.click();
+                            }}
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            Download
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          <Download className="h-4 w-4 mr-1" />
-                          MP3
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Download className="h-4 w-4 mr-1" />
-                          WAV
-                        </Button>
-                        <Button size="sm" variant="outline">
-                          <Download className="h-4 w-4 mr-1" />
-                          FLAC
-                        </Button>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-gray-400">No segments available. Please split the audio first.</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
