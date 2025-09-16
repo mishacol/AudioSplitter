@@ -291,7 +291,9 @@ app.get('/stream', async (req, res) => {
 // Manual audio splitting endpoint
 app.post('/split', async (req, res) => {
   try {
-    const { url, splitPoints, format = 'mp3' } = req.body || {};
+    const { url, splitPoints, format = 'mp3', startTime: customStartTime } = req.body || {};
+    
+    console.log('Split request:', { url, splitPoints, format, customStartTime });
     
     if (!url || !Array.isArray(splitPoints) || splitPoints.length === 0) {
       return res.status(400).json({ error: 'Missing url or splitPoints array' });
@@ -349,7 +351,7 @@ app.post('/split', async (req, res) => {
     try {
       // Create segments based on split points
       for (let i = 0; i < finalSplitPoints.length + 1; i++) {
-        const startTime = i === 0 ? 0 : finalSplitPoints[i - 1];
+        const startTime = customStartTime !== undefined ? customStartTime : (i === 0 ? 0 : finalSplitPoints[i - 1]);
         const endTime = i === finalSplitPoints.length ? duration : finalSplitPoints[i];
         
         if (startTime >= endTime) continue; // Skip invalid segments
@@ -360,27 +362,43 @@ app.post('/split', async (req, res) => {
 
         // Use ffmpeg to extract segment
         await new Promise((resolve, reject) => {
-          const ffmpeg = spawn(ffmpegPath, [
+          let ffmpegArgs = [
             '-hide_banner', '-loglevel', 'error',
             '-headers', `User-Agent: Mozilla/5.0\r\nReferer: ${url}\r\n`,
             '-i', audioUrl,
             '-ss', startTime.toString(),
             '-t', segmentDuration.toString(),
-            '-vn', '-acodec', format === 'mp3' ? 'libmp3lame' : 'copy',
-            '-b:a', '192k',
-            '-f', format,
-            tempFile
-          ]);
+            '-vn'
+          ];
+
+          // Set appropriate codec and format based on output format
+          if (format === 'mp3') {
+            ffmpegArgs.push('-acodec', 'libmp3lame', '-b:a', '192k', '-f', 'mp3');
+          } else if (format === 'wav') {
+            ffmpegArgs.push('-acodec', 'pcm_s16le', '-f', 'wav');
+          } else if (format === 'flac') {
+            ffmpegArgs.push('-acodec', 'flac', '-f', 'flac');
+          } else {
+            ffmpegArgs.push('-acodec', 'copy', '-f', format);
+          }
+
+          ffmpegArgs.push(tempFile);
+
+          const ffmpeg = spawn(ffmpegPath, ffmpegArgs);
 
           ffmpeg.on('close', (code) => {
             if (code === 0) {
               resolve();
             } else {
+              console.error(`ffmpeg exited with code ${code}`);
               reject(new Error(`ffmpeg exited with code ${code}`));
             }
           });
 
-          ffmpeg.on('error', reject);
+          ffmpeg.on('error', (error) => {
+            console.error('ffmpeg error:', error);
+            reject(error);
+          });
         });
 
         segments.push({
@@ -429,7 +447,7 @@ app.post('/split', async (req, res) => {
 
   } catch (err) {
     console.error('Split error:', err);
-    return res.status(500).json({ error: 'Audio splitting failed' });
+    return res.status(500).json({ error: 'Audio splitting failed', details: err.message });
   }
 });
 
