@@ -26,6 +26,8 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const [format, setFormat] = useState('mp3');
   const [directAudioUrl, setDirectAudioUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
 
   // Resolve audio URL when component mounts
   useEffect(() => {
@@ -224,6 +226,29 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     }
   };
 
+  // Handle mouse move over canvas
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Calculate time at mouse position using actual rendered canvas dimensions
+    const timeAtMouse = Math.max(0, Math.min(duration, (x / rect.width) * duration));
+    
+    // Use relative coordinates within the canvas container
+    setMousePosition({ x: x, y: y });
+    setHoverTime(timeAtMouse);
+  };
+
+  // Handle mouse leave canvas
+  const handleCanvasMouseLeave = () => {
+    setMousePosition(null);
+    setHoverTime(null);
+  };
+
 
 
 
@@ -274,7 +299,22 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
               className="w-full h-64 rounded"
               style={{ backgroundColor: 'rgba(51, 63, 72, 0.1)' }}
               onClick={handleCanvasClick}
+              onMouseMove={handleCanvasMouseMove}
+              onMouseLeave={handleCanvasMouseLeave}
             />
+          )}
+          
+          {/* Time Tooltip */}
+          {mousePosition && hoverTime !== null && (
+            <div 
+              className="absolute pointer-events-none bg-gray-900 text-white text-xs px-2 py-1 rounded shadow-lg z-10"
+              style={{
+                left: mousePosition.x - 25,
+                top: mousePosition.y - 35,
+              }}
+            >
+              {formatTime(hoverTime)}
+            </div>
           )}
         </div>
 
