@@ -19,6 +19,7 @@ from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import tempfile
 import uuid
+import yt_dlp
 
 app = Flask(__name__)
 CORS(app)
@@ -26,6 +27,34 @@ CORS(app)
 class AudioProcessor:
     def __init__(self):
         self.temp_dir = tempfile.mkdtemp()
+        
+    def download_audio(self, url):
+        """Download audio from URL using yt-dlp"""
+        try:
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': os.path.join(self.temp_dir, '%(title)s.%(ext)s'),
+                'extractaudio': True,
+                'audioformat': 'mp3',
+                'noplaylist': True,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                # Convert to mp3 if needed
+                if not filename.endswith('.mp3'):
+                    audio = AudioSegment.from_file(filename)
+                    mp3_filename = filename.rsplit('.', 1)[0] + '.mp3'
+                    audio.export(mp3_filename, format='mp3')
+                    os.remove(filename)  # Remove original file
+                    filename = mp3_filename
+                
+                return filename, info.get('duration', 0)
+                
+        except Exception as e:
+            print(f"Download error: {e}")
+            return None, 0
         
     def generate_waveform_data(self, audio_file_path):
         """Generate clean waveform data for visualization"""
@@ -171,9 +200,14 @@ def process_audio():
         if not audio_url:
             return jsonify({'error': 'No audio URL provided'}), 400
         
-        # Download audio file (simplified - in production, handle this properly)
-        # For now, assume it's a local file path or handle download
-        temp_file = os.path.join(processor.temp_dir, f"audio_{uuid.uuid4()}.mp3")
+        # Download audio file using yt-dlp
+        print(f"Downloading audio from: {audio_url}")
+        temp_file, duration = processor.download_audio(audio_url)
+        
+        if not temp_file:
+            return jsonify({'error': 'Failed to download audio'}), 500
+        
+        print(f"Audio downloaded to: {temp_file}")
         
         # Generate waveform data
         waveform_data = processor.generate_waveform_data(temp_file)
@@ -183,12 +217,15 @@ def process_audio():
             return jsonify({
                 'success': True,
                 'waveform_data': waveform_data,
-                'waveform_image': waveform_image
+                'waveform_image': waveform_image,
+                'duration': duration,
+                'file_path': temp_file
             })
         else:
             return jsonify({'error': 'Failed to process audio'}), 500
             
     except Exception as e:
+        print(f"Process audio error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/split-audio', methods=['POST'])

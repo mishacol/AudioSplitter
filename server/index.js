@@ -25,13 +25,12 @@ const handleSingleSegmentExtraction = async (req, res, url, startTime, endTime, 
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
-        timeout: 30000,
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${url}`,
         ],
       });
-      const info = JSON.parse(String(jsonStr));
+      const info = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
       const chosen = pickBestProgressiveAudio(info);
       if (chosen?.url) directUrl = chosen.url;
     } catch {}
@@ -41,7 +40,6 @@ const handleSingleSegmentExtraction = async (req, res, url, startTime, endTime, 
         const stdout = await youtubedl(url, {
           f: 'bestaudio',
           g: true,
-          timeout: 30000,
           addHeader: [
             `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
             `Referer: ${url}`,
@@ -117,6 +115,7 @@ const handleSingleSegmentExtraction = async (req, res, url, startTime, endTime, 
 };
 const pickBestProgressiveAudio = (info) => {
   const formats = Array.isArray(info?.formats) ? info.formats : [];
+  console.log('Total formats available:', formats.length);
   const candidates = formats.filter((f) => {
     const hasAudio = f.acodec && f.acodec !== 'none';
     const noVideo = !f.vcodec || f.vcodec === 'none';
@@ -125,9 +124,16 @@ const pickBestProgressiveAudio = (info) => {
     const ext = (f.ext || '').toLowerCase();
     const isSegmented = protocol.includes('m3u8') || protocol.includes('dash') || url.includes('.m3u8') || url.includes('manifest');
     const isProgressive = !isSegmented && (protocol.startsWith('http') || protocol === 'https');
+    const isHLS = protocol.includes('m3u8') || url.includes('.m3u8');
     const isPlayableExt = ['mp3', 'm4a', 'webm', 'ogg'].includes(ext);
-    return hasAudio && noVideo && url && isProgressive && (isPlayableExt || true);
+    // Accept both progressive downloads and HLS streams (like SoundCloud)
+    const result = hasAudio && noVideo && url && (isProgressive || isHLS) && (isPlayableExt || true);
+    if (result) {
+      console.log('Found candidate format:', f.format_id, f.acodec, f.vcodec, f.ext, f.protocol);
+    }
+    return result;
   });
+  console.log('Candidates found:', candidates.length);
   const sorted = candidates.sort((a, b) => (Number(b.abr || 0) - Number(a.abr || 0)));
   return sorted[0] || candidates[0];
 };
@@ -182,6 +188,7 @@ app.post('/resolve', async (req, res) => {
 
     // Prefer JSON parsing to select the best audio-only format
     try {
+      console.log('Calling youtubedl with URL:', url);
       const referer = url;
       const jsonStr = await youtubedl(url, {
         dumpSingleJson: true,
@@ -189,14 +196,16 @@ app.post('/resolve', async (req, res) => {
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
-        timeout: 30000, // 30 second timeout
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${referer}`,
         ],
       });
-      const info = JSON.parse(String(jsonStr));
+      console.log('youtubedl returned:', typeof jsonStr, jsonStr ? 'data received' : 'no data');
+      const info = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+      console.log('yt-dlp info parsed successfully, formats count:', info?.formats?.length || 0);
       const chosen = pickBestProgressiveAudio(info);
+      console.log('pickBestProgressiveAudio result:', chosen);
       if (chosen?.url) {
         let durationVal = info?.duration || null;
         if (!durationVal) {
@@ -220,6 +229,7 @@ app.post('/resolve', async (req, res) => {
         return res.json({ url: null, duration: durationOnly, title: info?.title || null, is_progressive: false });
       }
     } catch (e) {
+      console.error('youtubedl JSON parsing failed:', e.message);
       // fall through to -g method
     }
 
@@ -229,7 +239,6 @@ app.post('/resolve', async (req, res) => {
       const stdout = await youtubedl(url, {
         f: 'bestaudio',
         g: true,
-        timeout: 30000, // 30 second timeout
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${referer}`,
@@ -277,29 +286,37 @@ app.get('/stream', async (req, res) => {
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
-        timeout: 30000, // 30 second timeout
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${sourceUrl}`,
         ],
       });
-      const info = JSON.parse(String(jsonStr));
+      const info = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+      console.log('yt-dlp info received:', {
+        title: info.title,
+        formats: info.formats?.length || 0,
+        duration: info.duration
+      });
       const chosen = pickBestProgressiveAudio(info);
+      console.log('Chosen format:', chosen);
       if (chosen?.url) directUrl = chosen.url;
-    } catch {}
+    } catch (err) {
+      console.error('yt-dlp JSON parsing failed:', err.message);
+    }
     if (!directUrl) {
       try {
         const stdout = await youtubedl(sourceUrl, {
           f: 'bestaudio',
           g: true,
-          timeout: 30000, // 30 second timeout
           addHeader: [
             `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
             `Referer: ${sourceUrl}`,
           ],
         });
         directUrl = String(stdout).trim().split('\n').pop() || '';
-      } catch {}
+      } catch (err) {
+        console.error('yt-dlp stdout parsing failed:', err.message);
+      }
     }
     if (!directUrl) {
       return res.status(422).json({ error: 'Unable to resolve media URL' });
@@ -429,13 +446,12 @@ app.post('/split', async (req, res) => {
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
-        timeout: 30000, // 30 second timeout
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${url}`,
         ],
       });
-      audioInfo = JSON.parse(String(jsonStr));
+      audioInfo = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
     } catch (e) {
       return res.status(422).json({ error: 'Unable to resolve audio URL' });
     }

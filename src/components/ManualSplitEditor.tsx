@@ -26,6 +26,46 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const [dragType, setDragType] = useState<'start' | 'end' | 'move' | null>(null);
   const [showFormatDialog, setShowFormatDialog] = useState(false);
   const [format, setFormat] = useState('mp3');
+  const [directAudioUrl, setDirectAudioUrl] = useState<string | null>(null);
+
+  // Resolve audio URL when component mounts
+  useEffect(() => {
+    const resolveUrl = async () => {
+      if (audioUrl) {
+        setIsLoading(true);
+        const directUrl = await resolveAudioUrl(audioUrl);
+        if (directUrl) {
+          setDirectAudioUrl(directUrl);
+        } else {
+          console.error('Failed to resolve audio URL');
+        }
+        setIsLoading(false);
+      }
+    };
+    
+    resolveUrl();
+  }, [audioUrl]);
+
+  // Get direct audio URL from resolve endpoint
+  const resolveAudioUrl = async (url: string) => {
+    try {
+      const response = await fetch('http://localhost:3001/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data.url; // Direct audio URL
+    } catch (error) {
+      console.error('Failed to resolve audio URL:', error);
+      return null;
+    }
+  };
 
   // Format time helper
   const formatTime = (seconds: number) => {
@@ -349,7 +389,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       {/* Hidden audio element */}
       <audio 
         ref={audioRef}
-        src={`http://localhost:3001/stream?url=${encodeURIComponent(audioUrl)}`}
+        src={directAudioUrl ? `http://localhost:3001/stream?url=${encodeURIComponent(directAudioUrl)}` : undefined}
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
         onEnded={() => setIsPlaying(false)}
         className="hidden"
