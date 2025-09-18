@@ -28,6 +28,9 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false);
+  const [dragStartX, setDragStartX] = useState<number | null>(null);
+  const [isDraggingHandle, setIsDraggingHandle] = useState<'start' | 'end' | null>(null);
 
   // Resolve audio URL when component mounts
   useEffect(() => {
@@ -173,6 +176,46 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       ctx.fillRect(x, centerY - barHeight / 2, barWidth, barHeight);
     });
 
+    // Draw selection frame
+    if (selectionStart !== selectionEnd) {
+      const startX = (selectionStart / duration) * width;
+      const endX = (selectionEnd / duration) * width;
+      const selectionWidth = endX - startX;
+      
+      // Draw selection background
+      ctx.fillStyle = 'rgba(255, 255, 0, 0.2)'; // Yellow with transparency
+      ctx.fillRect(startX, 0, selectionWidth, height);
+      
+      // Draw selection border
+      ctx.strokeStyle = '#FFD700'; // Gold yellow
+      ctx.lineWidth = 2;
+      ctx.strokeRect(startX, 0, selectionWidth, height);
+      
+      // Draw selection handles
+      ctx.fillStyle = '#FFD700';
+      ctx.fillRect(startX - 8, 0, 16, height);
+      ctx.fillRect(endX - 8, 0, 16, height);
+      
+      // Draw 3D handle indicators with gradient effect
+      const centerY = height / 2;
+      
+      // Left handle - 3D effect
+      const leftGradient = ctx.createLinearGradient(startX - 6, centerY - 10, startX + 2, centerY + 10);
+      leftGradient.addColorStop(0, '#333'); // Dark shadow
+      leftGradient.addColorStop(0.5, '#000'); // Main black
+      leftGradient.addColorStop(1, '#666'); // Light highlight
+      ctx.fillStyle = leftGradient;
+      ctx.fillRect(startX - 6, centerY - 10, 8, 20);
+      
+      // Right handle - 3D effect
+      const rightGradient = ctx.createLinearGradient(endX - 2, centerY - 10, endX + 6, centerY + 10);
+      rightGradient.addColorStop(0, '#333'); // Dark shadow
+      rightGradient.addColorStop(0.5, '#000'); // Main black
+      rightGradient.addColorStop(1, '#666'); // Light highlight
+      ctx.fillStyle = rightGradient;
+      ctx.fillRect(endX - 2, centerY - 10, 8, 20);
+    }
+
 
 
   }, [waveformData, selectionStart, selectionEnd, currentTime, duration]);
@@ -238,6 +281,14 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     // Calculate time at mouse position using actual rendered canvas dimensions
     const timeAtMouse = Math.max(0, Math.min(duration, (x / rect.width) * duration));
     
+    // Check if hovering over a handle
+    const handle = getHandleAtPosition(x, canvas);
+    if (handle) {
+      canvas.style.cursor = 'ew-resize';
+    } else {
+      canvas.style.cursor = 'default';
+    }
+    
     // Use relative coordinates within the canvas container
     setMousePosition({ x: x, y: y });
     setHoverTime(timeAtMouse);
@@ -247,6 +298,98 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const handleCanvasMouseLeave = () => {
     setMousePosition(null);
     setHoverTime(null);
+  };
+
+  // Check if mouse is over a handle
+  const getHandleAtPosition = (x: number, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect();
+    const canvasX = x;
+    const handleWidth = 20; // Increased width of handle detection area for thicker handles
+    
+    const startX = (selectionStart / duration) * rect.width;
+    const endX = (selectionEnd / duration) * rect.width;
+    
+    if (Math.abs(canvasX - startX) < handleWidth) {
+      return 'start';
+    } else if (Math.abs(canvasX - endX) < handleWidth) {
+      return 'end';
+    }
+    return null;
+  };
+
+  // Handle mouse down for selection dragging
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const timeAtMouse = Math.max(0, Math.min(duration, (x / rect.width) * duration));
+    
+    // Check if clicking on a handle
+    const handle = getHandleAtPosition(x, canvas);
+    if (handle) {
+      // If already dragging this handle, release it
+      if (isDraggingHandle === handle) {
+        setIsDraggingHandle(null);
+        return;
+      }
+      // Start dragging this handle
+      setIsDraggingHandle(handle);
+      return;
+    }
+    
+    // If clicking elsewhere while dragging a handle, release it
+    if (isDraggingHandle) {
+      setIsDraggingHandle(null);
+      return;
+    }
+    
+    setIsDraggingSelection(true);
+    setDragStartX(x);
+    
+    // Set initial selection
+    setSelectionStart(timeAtMouse);
+    setSelectionEnd(timeAtMouse);
+  };
+
+  // Handle mouse move during selection dragging
+  const handleCanvasMouseMoveWithDrag = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const timeAtMouse = Math.max(0, Math.min(duration, (x / rect.width) * duration));
+    
+    // Handle dragging handles
+    if (isDraggingHandle) {
+      if (isDraggingHandle === 'start') {
+        setSelectionStart(timeAtMouse);
+      } else if (isDraggingHandle === 'end') {
+        setSelectionEnd(timeAtMouse);
+      }
+      return;
+    }
+    
+    // Handle dragging selection
+    if (!isDraggingSelection || dragStartX === null) return;
+    
+    // Update selection based on drag direction
+    if (x < dragStartX) {
+      setSelectionStart(timeAtMouse);
+      setSelectionEnd(Math.max(0, Math.min(duration, (dragStartX / rect.width) * duration)));
+    } else {
+      setSelectionStart(Math.max(0, Math.min(duration, (dragStartX / rect.width) * duration)));
+      setSelectionEnd(timeAtMouse);
+    }
+  };
+
+  // Handle mouse up to finish selection
+  const handleCanvasMouseUp = () => {
+    setIsDraggingSelection(false);
+    setDragStartX(null);
+    setIsDraggingHandle(null);
   };
 
 
@@ -299,7 +442,9 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
               className="w-full h-64 rounded"
               style={{ backgroundColor: 'rgba(51, 63, 72, 0.1)' }}
               onClick={handleCanvasClick}
-              onMouseMove={handleCanvasMouseMove}
+              onMouseMove={(isDraggingSelection || isDraggingHandle) ? handleCanvasMouseMoveWithDrag : handleCanvasMouseMove}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseUp={handleCanvasMouseUp}
               onMouseLeave={handleCanvasMouseLeave}
             />
           )}
@@ -316,14 +461,35 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
               {formatTime(hoverTime)}
             </div>
           )}
+          
+          {/* Selection Frame Time Tooltips */}
+          {selectionStart !== selectionEnd && (
+            <>
+              {/* Start time tooltip */}
+              <div 
+                className="absolute pointer-events-none bg-yellow-600 text-white text-xs px-2 py-1 rounded shadow-lg z-10"
+                style={{
+                  left: (selectionStart / duration) * 100 + '%',
+                  top: -35,
+                }}
+              >
+                {formatTime(selectionStart)}
+              </div>
+              
+              {/* End time tooltip */}
+              <div 
+                className="absolute pointer-events-none bg-yellow-600 text-white text-xs px-2 py-1 rounded shadow-lg z-10"
+                style={{
+                  left: (selectionEnd / duration) * 100 + '%',
+                  top: -35,
+                }}
+              >
+                {formatTime(selectionEnd)}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Time markers */}
-        <div className="flex justify-between mt-2 text-xs text-gray-400">
-          {Array.from({ length: 6 }, (_, i) => (
-            <span key={i}>{formatTime((duration / 5) * i)}</span>
-          ))}
-        </div>
       </div>
 
       {/* Playback Controls */}
