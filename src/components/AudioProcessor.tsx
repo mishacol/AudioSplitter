@@ -22,20 +22,46 @@ const AudioProcessor: React.FC = () => {
   const [hasTriedStreamFallback, setHasTriedStreamFallback] = useState(false);
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
   const [volume, setVolume] = useState(1);
+  const [isResolving, setIsResolving] = useState(false);
+  const [resolveProgress, setResolveProgress] = useState(0);
 
   // Resolve audio URL immediately when audioUrl changes (like Manual Split)
   useEffect(() => {
     const resolveUrl = async () => {
       if (audioUrl && isStreamingPlatformUrl(audioUrl)) {
+        setIsResolving(true);
+        setResolveProgress(0);
         console.log('Auto-resolving URL:', audioUrl);
-        const resolved = await resolveStreamingUrl(audioUrl);
-        if (resolved?.url) {
-          setResolvedAudioUrl(resolved.url);
-          if (resolved.duration) {
-            setDuration(resolved.duration);
+        
+        // Simulate progress updates
+        const progressInterval = setInterval(() => {
+          setResolveProgress(prev => {
+            if (prev >= 90) return prev;
+            return prev + Math.random() * 15;
+          });
+        }, 200);
+        
+        try {
+          const resolved = await resolveStreamingUrl(audioUrl);
+          clearInterval(progressInterval);
+          setResolveProgress(100);
+          
+          if (resolved?.url) {
+            setResolvedAudioUrl(resolved.url);
+            if (resolved.duration) {
+              setDuration(resolved.duration);
+            }
+            setAudioFetched(true);
+            console.log('Auto-resolved URL:', resolved.url);
           }
-          setAudioFetched(true);
-          console.log('Auto-resolved URL:', resolved.url);
+        } catch (error) {
+          clearInterval(progressInterval);
+          console.error('URL resolution failed:', error);
+        } finally {
+          setTimeout(() => {
+            setIsResolving(false);
+            setResolveProgress(0);
+          }, 500);
         }
       } else if (audioUrl) {
         // Direct URL, use it directly
@@ -171,18 +197,6 @@ const AudioProcessor: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleFetchAudio = async () => {
-    if (!audioUrl) return;
-    setIsProcessing(true);
-    setAudioFetched(false);
-    setHasTriedStreamFallback(false);
-    
-    // The URL resolution is now handled automatically by useEffect
-    // Just trigger the processing state and let the useEffect handle the rest
-    setTimeout(() => {
-      setIsProcessing(false);
-    }, 1000); // Give it a moment to resolve
-  };
 
   const handleSplitAudio = async () => {
     if (!splitMode || !audioUrl) return;
@@ -363,31 +377,34 @@ const AudioProcessor: React.FC = () => {
                   </Tooltip>
                 ))}
               </div>
-              <div className="flex gap-4">
-                <Input
-                  placeholder="Paste Audio URL"
-                  value={audioUrl}
-                  onChange={(e) => setAudioUrl(e.target.value)}
-                  className="bg-gray-700 border-gray-600 text-white flex-1"
-                />
-                <Button 
-                  onClick={handleFetchAudio}
-                  disabled={!audioUrl || isProcessing}
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                >
-                  {isProcessing && !audioFetched ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Fetching...
-                    </>
-                  ) : (
-                    'Fetch Audio'
-                  )}
-                </Button>
-              </div>
+              <Input
+                placeholder="Paste Audio URL"
+                value={audioUrl}
+                onChange={(e) => setAudioUrl(e.target.value)}
+                className="w-full bg-gray-700 border-gray-600 text-white"
+              />
               <p className="mt-2 text-xs text-gray-400">
                 Note: Use a direct audio URL (e.g., .mp3, .wav). Streaming pages like SoundCloud or YouTube require a downloader proxy.
               </p>
+              
+              {/* Track Preparation Progress */}
+              {isResolving && (
+                <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                      <span className="text-sm text-gray-300">Fetching track...</span>
+                    </div>
+                    <span className="text-sm text-gray-400">{Math.round(resolveProgress)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${resolveProgress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
               {/* Hidden audio element for real playback */}
               <audio 
                 ref={audioRef} 
