@@ -31,6 +31,8 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const [isDraggingSelection, setIsDraggingSelection] = useState(false);
   const [dragStartX, setDragStartX] = useState<number | null>(null);
   const [isDraggingHandle, setIsDraggingHandle] = useState<'start' | 'end' | null>(null);
+  const [virtualPlaybackTime, setVirtualPlaybackTime] = useState(0);
+  const [wasPlayingBeforeDrag, setWasPlayingBeforeDrag] = useState(false);
 
   // Resolve audio URL when component mounts
   useEffect(() => {
@@ -177,7 +179,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     // Clear canvas
     ctx.clearRect(0, 0, width, height);
 
-    // Add padding for handles (16px on each side)
+    // Add padding for handles (16px on each side so progress bar is right at handle inner edge)
     const handlePadding = 16;
     const waveformWidth = width - (handlePadding * 2);
 
@@ -198,6 +200,29 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       ctx.fillRect(x, centerY - barHeight / 2, barWidth, barHeight);
     });
 
+    // Draw playback progress bar (positioned at handle inner edges)
+    const progressX = handlePadding + (currentTime / duration) * waveformWidth;
+    
+    // Draw progress line
+    ctx.strokeStyle = '#FF4444'; // Red progress line
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(progressX, 0);
+    ctx.lineTo(progressX, height);
+    ctx.stroke();
+    
+    // Draw progress indicator circle
+    ctx.fillStyle = '#FF4444';
+    ctx.beginPath();
+    ctx.arc(progressX, height / 2, 6, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    // Add white center to circle
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(progressX, height / 2, 3, 0, 2 * Math.PI);
+    ctx.fill();
+
     // Draw selection frame
     if (selectionStart !== selectionEnd) {
       const startX = handlePadding + (selectionStart / duration) * waveformWidth;
@@ -216,59 +241,59 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       // Draw 3D handles with shadows and gradients
       const centerY = height / 2;
       
-      // Left handle - 3D effect with shadow (thinner)
+      // Left handle - 3D effect with shadow (x2 thinner)
       // Shadow
       ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.fillRect(startX - 14, 2, 32, height - 2);
+      ctx.fillRect(startX - 6, 2, 16, height - 2);
       
       // Main handle with gradient
-      const leftGradient = ctx.createLinearGradient(startX - 16, 0, startX + 16, 0);
+      const leftGradient = ctx.createLinearGradient(startX - 8, 0, startX + 8, 0);
       leftGradient.addColorStop(0, '#FFA500'); // Orange highlight
       leftGradient.addColorStop(0.3, '#FFD700'); // Gold
       leftGradient.addColorStop(0.7, '#DAA520'); // Darker gold
       leftGradient.addColorStop(1, '#B8860B'); // Dark gold shadow
       ctx.fillStyle = leftGradient;
-      ctx.fillRect(startX - 16, 0, 32, height);
+      ctx.fillRect(startX - 8, 0, 16, height);
       
       // Inner highlight
       ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.fillRect(startX - 14, 2, 28, height / 3);
+      ctx.fillRect(startX - 6, 2, 12, height / 3);
       
       // Center grip texture
       ctx.fillStyle = '#8B6914';
-      ctx.fillRect(startX - 2, centerY - 8, 4, 16);
+      ctx.fillRect(startX - 1, centerY - 8, 2, 16);
       
       // Grip highlights
       ctx.fillStyle = '#DAA520';
-      ctx.fillRect(startX - 1, centerY - 7, 1, 14);
-      ctx.fillRect(startX + 1, centerY - 7, 1, 14);
+      ctx.fillRect(startX - 0.5, centerY - 7, 0.5, 14);
+      ctx.fillRect(startX + 0.5, centerY - 7, 0.5, 14);
       
-      // Right handle - 3D effect with shadow (thinner)
+      // Right handle - 3D effect with shadow (x2 thinner)
       // Shadow
       ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.fillRect(endX - 14, 2, 32, height - 2);
+      ctx.fillRect(endX - 6, 2, 16, height - 2);
       
       // Main handle with gradient
-      const rightGradient = ctx.createLinearGradient(endX - 16, 0, endX + 16, 0);
+      const rightGradient = ctx.createLinearGradient(endX - 8, 0, endX + 8, 0);
       rightGradient.addColorStop(0, '#FFA500'); // Orange highlight
       rightGradient.addColorStop(0.3, '#FFD700'); // Gold
       rightGradient.addColorStop(0.7, '#DAA520'); // Darker gold
       rightGradient.addColorStop(1, '#B8860B'); // Dark gold shadow
       ctx.fillStyle = rightGradient;
-      ctx.fillRect(endX - 16, 0, 32, height);
+      ctx.fillRect(endX - 8, 0, 16, height);
       
       // Inner highlight
       ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.fillRect(endX - 14, 2, 28, height / 3);
+      ctx.fillRect(endX - 6, 2, 12, height / 3);
       
       // Center grip texture
       ctx.fillStyle = '#8B6914';
-      ctx.fillRect(endX - 2, centerY - 8, 4, 16);
+      ctx.fillRect(endX - 1, centerY - 8, 2, 16);
       
       // Grip highlights
       ctx.fillStyle = '#DAA520';
-      ctx.fillRect(endX - 1, centerY - 7, 1, 14);
-      ctx.fillRect(endX + 1, centerY - 7, 1, 14);
+      ctx.fillRect(endX - 0.5, centerY - 7, 0.5, 14);
+      ctx.fillRect(endX + 0.5, centerY - 7, 0.5, 14);
     }
 
 
@@ -362,7 +387,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const getHandleAtPosition = (x: number, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
     const canvasX = x;
-    const handleWidth = 40; // Detection area for thinner handles
+    const handleWidth = 20; // Detection area for x2 thinner handles
     const handlePadding = 16;
     const waveformWidth = rect.width - (handlePadding * 2);
     
