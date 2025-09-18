@@ -17,9 +17,35 @@ const AudioProcessor: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showPulse, setShowPulse] = useState(true);
+  const [audioLoading, setAudioLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [hasTriedStreamFallback, setHasTriedStreamFallback] = useState(false);
+  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
   const [volume, setVolume] = useState(1);
+
+  // Resolve audio URL immediately when audioUrl changes (like Manual Split)
+  useEffect(() => {
+    const resolveUrl = async () => {
+      if (audioUrl && isStreamingPlatformUrl(audioUrl)) {
+        console.log('Auto-resolving URL:', audioUrl);
+        const resolved = await resolveStreamingUrl(audioUrl);
+        if (resolved?.url) {
+          setResolvedAudioUrl(resolved.url);
+          if (resolved.duration) {
+            setDuration(resolved.duration);
+          }
+          setAudioFetched(true);
+          console.log('Auto-resolved URL:', resolved.url);
+        }
+      } else if (audioUrl) {
+        // Direct URL, use it directly
+        setResolvedAudioUrl(audioUrl);
+        setAudioFetched(true);
+      }
+    };
+    
+    resolveUrl();
+  }, [audioUrl]);
   const [splitPoints, setSplitPoints] = useState<number[]>([]);
   const [splitSegments, setSplitSegments] = useState<any[]>([]);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
@@ -89,13 +115,33 @@ const AudioProcessor: React.FC = () => {
       if (isStreamingPlatformUrl(audioUrl) && !hasTriedStreamFallback && audioUrl) {
         try {
           setHasTriedStreamFallback(true);
-          const streamUrl = `http://localhost:3001/stream?url=${encodeURIComponent(audioUrl)}`;
-          audio.src = streamUrl;
-          audio.load();
-          // Defer playback to a user gesture to avoid autoplay restrictions
-          setIsPlaying(false);
-          setAudioFetched(true);
-          return;
+          // First resolve the URL to get direct audio URL
+          console.log('Resolving URL:', audioUrl);
+          const resolveResponse = await fetch('http://localhost:3001/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: audioUrl })
+          });
+          
+          console.log('Resolve response status:', resolveResponse.status);
+          
+          if (resolveResponse.ok) {
+            const resolveData = await resolveResponse.json();
+            const directUrl = resolveData.url;
+            console.log('Direct URL resolved:', directUrl);
+            const streamUrl = `http://localhost:3001/stream?url=${encodeURIComponent(directUrl)}`;
+            console.log('Stream URL:', streamUrl);
+            audio.src = streamUrl;
+            console.log('Audio src set to:', audio.src);
+            audio.load();
+            console.log('Audio load() called');
+            // Defer playback to a user gesture to avoid autoplay restrictions
+            setIsPlaying(false);
+            setAudioFetched(true);
+            return;
+          } else {
+            console.error('Resolve failed:', resolveResponse.status, await resolveResponse.text());
+          }
         } catch {
           // fall through to error toast
         }
@@ -130,29 +176,12 @@ const AudioProcessor: React.FC = () => {
     setIsProcessing(true);
     setAudioFetched(false);
     setHasTriedStreamFallback(false);
-    try {
-      let loadUrl = audioUrl;
-      if (isStreamingPlatformUrl(audioUrl)) {
-        // Immediately route playback through our proxy to avoid CORS, and fetch metadata in background
-        loadUrl = `http://localhost:3001/stream?url=${encodeURIComponent(audioUrl)}`;
-        setHasTriedStreamFallback(true);
-        // Don't set audioFetched=true immediately - let the audio events handle it
-        // Fire and forget duration resolve; do not flip UI back if it fails
-        resolveStreamingUrl(audioUrl).then((resolved) => {
-          if (resolved?.duration && resolved.duration > 0) {
-            setDuration(resolved.duration);
-          }
-        }).catch(() => {});
-      }
-      const audio = audioRef.current;
-      if (!audio) return;
-      audio.src = loadUrl;
-      audio.load();
-      // Let events drive the rest (loadedmetadata/canplay)
-    } catch (e) {
+    
+    // The URL resolution is now handled automatically by useEffect
+    // Just trigger the processing state and let the useEffect handle the rest
+    setTimeout(() => {
       setIsProcessing(false);
-      toast({ title: 'Invalid URL', description: 'Please provide a direct audio URL (mp3, wav, etc.) or use a supported source.', variant: 'destructive' as any });
-    }
+    }, 1000); // Give it a moment to resolve
   };
 
   const handleSplitAudio = async () => {
@@ -204,15 +233,39 @@ const AudioProcessor: React.FC = () => {
   const togglePlay = async () => {
     const audio = audioRef.current;
     if (!audio) return;
+    
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
     } else {
+      // Check if audio is ready
+      console.log('Audio readyState:', audio.readyState);
+      console.log('Audio src:', audio.src);
+      console.log('Audio networkState:', audio.networkState);
+      
+      if (audio.readyState < 2) {
+        console.log('Audio not ready, readyState:', audio.readyState);
+        // Try to force load more data
+        audio.load();
+        // Wait a bit and try again
+        setTimeout(() => {
+          console.log('After load(), readyState:', audio.readyState);
+          if (audio.readyState >= 2) {
+            audio.play().then(() => setIsPlaying(true)).catch(console.error);
+          } else {
+            toast({ title: 'Audio not ready', description: `ReadyState: ${audio.readyState}. Please wait for the audio to load completely.`, variant: 'destructive' as any });
+          }
+        }, 1000);
+        return;
+      }
+      
       try {
         await audio.play();
         setIsPlaying(true);
       } catch (e) {
-        toast({ title: 'Playback failed', description: 'Autoplay restrictions or load errors may prevent playback.', variant: 'destructive' as any });
+        console.error('Audio play failed:', e);
+        setIsPlaying(false);
+        toast({ title: 'Playback failed', description: 'Please try clicking the play button again.', variant: 'destructive' as any });
       }
     }
   };
@@ -336,7 +389,26 @@ const AudioProcessor: React.FC = () => {
                 Note: Use a direct audio URL (e.g., .mp3, .wav). Streaming pages like SoundCloud or YouTube require a downloader proxy.
               </p>
               {/* Hidden audio element for real playback */}
-              <audio ref={audioRef} className="hidden" preload="auto" />
+              <audio 
+                ref={audioRef} 
+                className="hidden" 
+                preload="auto" 
+                crossOrigin="anonymous"
+                src={resolvedAudioUrl ? `http://localhost:3001/stream?url=${encodeURIComponent(resolvedAudioUrl)}` : undefined}
+                onLoadStart={() => {
+                  console.log('Audio loading started');
+                  setAudioLoading(true);
+                }}
+                onCanPlay={() => {
+                  console.log('Audio can play');
+                  setAudioLoading(false);
+                }}
+                onError={(e) => {
+                  console.error('Audio error:', e);
+                  setIsPlaying(false);
+                  setAudioLoading(false);
+                }}
+              />
             </CardContent>
           </Card>
 
@@ -372,14 +444,14 @@ const AudioProcessor: React.FC = () => {
               <div className="flex items-center justify-between mb-6 gap-4">
                 <button
                   onClick={togglePlay}
-                  disabled={isProcessing && !audioFetched}
+                  disabled={(isProcessing && !audioFetched) || audioLoading}
                   className={`rounded-full p-4 transition-colors duration-300 ${
-                    isProcessing && !audioFetched 
+                    (isProcessing && !audioFetched) || audioLoading
                       ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white'
                   }`}
                 >
-                  {isProcessing && !audioFetched ? (
+                  {(isProcessing && !audioFetched) || audioLoading ? (
                     <Loader2 className="w-6 h-6 animate-spin" />
                   ) : isPlaying ? (
                     <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -472,7 +544,11 @@ const AudioProcessor: React.FC = () => {
                   <Button
                     variant={splitMode === 'automatic' ? 'default' : 'outline'}
                     onClick={() => setSplitMode('automatic')}
-                    className="flex items-center gap-2"
+                    className={`flex items-center gap-2 ${
+                      splitMode === 'automatic' 
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' 
+                        : ''
+                    }`}
                   >
                     <Wand2 className="h-4 w-4" />
                     Automatic Split
@@ -480,7 +556,11 @@ const AudioProcessor: React.FC = () => {
                   <Button
                     variant={splitMode === 'manual' ? 'default' : 'outline'}
                     onClick={() => setSplitMode('manual')}
-                    className="flex items-center gap-2"
+                    className={`flex items-center gap-2 ${
+                      splitMode === 'manual' 
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' 
+                        : ''
+                    }`}
                   >
                     <Scissors className="h-4 w-4" />
                     Manual Split

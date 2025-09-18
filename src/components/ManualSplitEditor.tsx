@@ -25,6 +25,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const [showFormatDialog, setShowFormatDialog] = useState(false);
   const [format, setFormat] = useState('mp3');
   const [directAudioUrl, setDirectAudioUrl] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Resolve audio URL when component mounts
   useEffect(() => {
@@ -291,7 +292,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
           <Button
             onClick={togglePlay}
             disabled={isLoading || !directAudioUrl}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:from-gray-600 disabled:to-gray-600"
           >
             {isLoading ? (
               <>
@@ -369,7 +370,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
             </select>
             <Button
               onClick={() => setShowFormatDialog(true)}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
             >
               <Download className="h-4 w-4 mr-2" />
               Import Selection
@@ -392,7 +393,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
             <div className="space-y-3">
               <Button
                 onClick={handleExport}
-                className="w-full bg-green-600 hover:bg-green-700 py-3"
+                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 py-3"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Import as {format.toUpperCase()}
