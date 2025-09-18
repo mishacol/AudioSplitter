@@ -144,6 +144,24 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     setTimeout(generateMockWaveform, 500);
   }, [audioUrl]);
 
+  // Global mouse up listener to release handles when clicking anywhere
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (isDraggingHandle) {
+        setIsDraggingHandle(null);
+        const canvas = canvasRef.current;
+        if (canvas) {
+          canvas.style.cursor = 'default';
+        }
+      }
+    };
+
+    document.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => {
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isDraggingHandle]);
+
   // Draw waveform
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -159,13 +177,17 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     // Clear canvas
     ctx.clearRect(0, 0, width, height);
 
+    // Add padding for handles (16px on each side)
+    const handlePadding = 16;
+    const waveformWidth = width - (handlePadding * 2);
+
     // Draw waveform as bars (like real audio editors)
     ctx.fillStyle = '#3B82F6'; // Lighter blue with glow
     
     waveformData.forEach((amplitude, index) => {
-      const x = (index / waveformData.length) * width;
+      const x = handlePadding + (index / waveformData.length) * waveformWidth;
       const barHeight = amplitude * centerY * 1.6;
-      const barWidth = width / waveformData.length;
+      const barWidth = waveformWidth / waveformData.length;
       
       // Draw glow effect (slightly larger and more transparent)
       ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; // Glow color
@@ -178,8 +200,8 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
 
     // Draw selection frame
     if (selectionStart !== selectionEnd) {
-      const startX = (selectionStart / duration) * width;
-      const endX = (selectionEnd / duration) * width;
+      const startX = handlePadding + (selectionStart / duration) * waveformWidth;
+      const endX = handlePadding + (selectionEnd / duration) * waveformWidth;
       const selectionWidth = endX - startX;
       
       // Draw selection background
@@ -191,29 +213,62 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       ctx.lineWidth = 2;
       ctx.strokeRect(startX, 0, selectionWidth, height);
       
-      // Draw selection handles
-      ctx.fillStyle = '#FFD700';
-      ctx.fillRect(startX - 8, 0, 16, height);
-      ctx.fillRect(endX - 8, 0, 16, height);
-      
-      // Draw 3D handle indicators with gradient effect
+      // Draw 3D handles with shadows and gradients
       const centerY = height / 2;
       
-      // Left handle - 3D effect
-      const leftGradient = ctx.createLinearGradient(startX - 6, centerY - 10, startX + 2, centerY + 10);
-      leftGradient.addColorStop(0, '#333'); // Dark shadow
-      leftGradient.addColorStop(0.5, '#000'); // Main black
-      leftGradient.addColorStop(1, '#666'); // Light highlight
-      ctx.fillStyle = leftGradient;
-      ctx.fillRect(startX - 6, centerY - 10, 8, 20);
+      // Left handle - 3D effect with shadow (thinner)
+      // Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillRect(startX - 14, 2, 32, height - 2);
       
-      // Right handle - 3D effect
-      const rightGradient = ctx.createLinearGradient(endX - 2, centerY - 10, endX + 6, centerY + 10);
-      rightGradient.addColorStop(0, '#333'); // Dark shadow
-      rightGradient.addColorStop(0.5, '#000'); // Main black
-      rightGradient.addColorStop(1, '#666'); // Light highlight
+      // Main handle with gradient
+      const leftGradient = ctx.createLinearGradient(startX - 16, 0, startX + 16, 0);
+      leftGradient.addColorStop(0, '#FFA500'); // Orange highlight
+      leftGradient.addColorStop(0.3, '#FFD700'); // Gold
+      leftGradient.addColorStop(0.7, '#DAA520'); // Darker gold
+      leftGradient.addColorStop(1, '#B8860B'); // Dark gold shadow
+      ctx.fillStyle = leftGradient;
+      ctx.fillRect(startX - 16, 0, 32, height);
+      
+      // Inner highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.fillRect(startX - 14, 2, 28, height / 3);
+      
+      // Center grip texture
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(startX - 2, centerY - 8, 4, 16);
+      
+      // Grip highlights
+      ctx.fillStyle = '#DAA520';
+      ctx.fillRect(startX - 1, centerY - 7, 1, 14);
+      ctx.fillRect(startX + 1, centerY - 7, 1, 14);
+      
+      // Right handle - 3D effect with shadow (thinner)
+      // Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fillRect(endX - 14, 2, 32, height - 2);
+      
+      // Main handle with gradient
+      const rightGradient = ctx.createLinearGradient(endX - 16, 0, endX + 16, 0);
+      rightGradient.addColorStop(0, '#FFA500'); // Orange highlight
+      rightGradient.addColorStop(0.3, '#FFD700'); // Gold
+      rightGradient.addColorStop(0.7, '#DAA520'); // Darker gold
+      rightGradient.addColorStop(1, '#B8860B'); // Dark gold shadow
       ctx.fillStyle = rightGradient;
-      ctx.fillRect(endX - 2, centerY - 10, 8, 20);
+      ctx.fillRect(endX - 16, 0, 32, height);
+      
+      // Inner highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.fillRect(endX - 14, 2, 28, height / 3);
+      
+      // Center grip texture
+      ctx.fillStyle = '#8B6914';
+      ctx.fillRect(endX - 2, centerY - 8, 4, 16);
+      
+      // Grip highlights
+      ctx.fillStyle = '#DAA520';
+      ctx.fillRect(endX - 1, centerY - 7, 1, 14);
+      ctx.fillRect(endX + 1, centerY - 7, 1, 14);
     }
 
 
@@ -278,13 +333,16 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Calculate time at mouse position using actual rendered canvas dimensions
-    const timeAtMouse = Math.max(0, Math.min(duration, (x / rect.width) * duration));
+    // Calculate time at mouse position accounting for handle padding
+    const handlePadding = 16;
+    const waveformWidth = rect.width - (handlePadding * 2);
+    const adjustedX = Math.max(handlePadding, Math.min(rect.width - handlePadding, x));
+    const timeAtMouse = Math.max(0, Math.min(duration, ((adjustedX - handlePadding) / waveformWidth) * duration));
     
-    // Check if hovering over a handle
+    // Check if hovering over a handle to show double arrow cursor
     const handle = getHandleAtPosition(x, canvas);
     if (handle) {
-      canvas.style.cursor = 'ew-resize';
+      canvas.style.cursor = 'ew-resize'; // Double arrow ↔
     } else {
       canvas.style.cursor = 'default';
     }
@@ -304,10 +362,12 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const getHandleAtPosition = (x: number, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
     const canvasX = x;
-    const handleWidth = 20; // Increased width of handle detection area for thicker handles
+    const handleWidth = 40; // Detection area for thinner handles
+    const handlePadding = 16;
+    const waveformWidth = rect.width - (handlePadding * 2);
     
-    const startX = (selectionStart / duration) * rect.width;
-    const endX = (selectionEnd / duration) * rect.width;
+    const startX = handlePadding + (selectionStart / duration) * waveformWidth;
+    const endX = handlePadding + (selectionEnd / duration) * waveformWidth;
     
     if (Math.abs(canvasX - startX) < handleWidth) {
       return 'start';
@@ -324,18 +384,21 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
 
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const timeAtMouse = Math.max(0, Math.min(duration, (x / rect.width) * duration));
+    // Calculate time at mouse position accounting for handle padding
+    const handlePadding = 16;
+    const waveformWidth = rect.width - (handlePadding * 2);
+    const adjustedX = Math.max(handlePadding, Math.min(rect.width - handlePadding, x));
+    const timeAtMouse = Math.max(0, Math.min(duration, ((adjustedX - handlePadding) / waveformWidth) * duration));
     
     // Check if clicking on a handle
     const handle = getHandleAtPosition(x, canvas);
     if (handle) {
-      // If already dragging this handle, release it
-      if (isDraggingHandle === handle) {
-        setIsDraggingHandle(null);
-        return;
-      }
-      // Start dragging this handle
+      // Start dragging this handle only on explicit click
       setIsDraggingHandle(handle);
+      // Track if audio was playing before drag started
+      setWasPlayingBeforeDrag(isPlaying);
+      // Set cursor to resize
+      canvas.style.cursor = 'ew-resize';
       return;
     }
     
@@ -360,14 +423,22 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
 
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const timeAtMouse = Math.max(0, Math.min(duration, (x / rect.width) * duration));
+    // Calculate time at mouse position accounting for handle padding
+    const handlePadding = 16;
+    const waveformWidth = rect.width - (handlePadding * 2);
+    const adjustedX = Math.max(handlePadding, Math.min(rect.width - handlePadding, x));
+    const timeAtMouse = Math.max(0, Math.min(duration, ((adjustedX - handlePadding) / waveformWidth) * duration));
     
     // Handle dragging handles
     if (isDraggingHandle) {
       if (isDraggingHandle === 'start') {
-        setSelectionStart(timeAtMouse);
+        // Allow dragging to exact start (0) and ensure it doesn't go beyond end
+        const newStart = Math.max(0, Math.min(timeAtMouse, selectionEnd));
+        setSelectionStart(newStart);
       } else if (isDraggingHandle === 'end') {
-        setSelectionEnd(timeAtMouse);
+        // Allow dragging to exact end (duration) and ensure it doesn't go before start
+        const newEnd = Math.max(selectionStart, Math.min(timeAtMouse, duration));
+        setSelectionEnd(newEnd);
       }
       return;
     }
@@ -386,10 +457,44 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   };
 
   // Handle mouse up to finish selection
-  const handleCanvasMouseUp = () => {
+  const handleCanvasMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    // Calculate time at mouse position accounting for handle padding
+    const handlePadding = 16;
+    const waveformWidth = rect.width - (handlePadding * 2);
+    const adjustedX = Math.max(handlePadding, Math.min(rect.width - handlePadding, x));
+    const timeAtMouse = Math.max(0, Math.min(duration, ((adjustedX - handlePadding) / waveformWidth) * duration));
+    
+    // If we were dragging a handle, continue playback from the handle's release position
+    if (isDraggingHandle) {
+      const audio = audioRef.current;
+      if (audio) {
+        audio.currentTime = timeAtMouse;
+        setCurrentTime(timeAtMouse);
+        
+        // Reset virtual playback time to selection start
+        setVirtualPlaybackTime(selectionStart);
+        
+        // If audio was playing before dragging, continue playing
+        if (wasPlayingBeforeDrag) {
+          audio.play().catch(error => {
+            console.error('Audio play failed:', error);
+            setIsPlaying(false);
+          });
+        }
+      }
+    }
+    
     setIsDraggingSelection(false);
     setDragStartX(null);
     setIsDraggingHandle(null);
+    
+    // Reset cursor
+    canvas.style.cursor = 'default';
   };
 
 
