@@ -491,11 +491,8 @@ const AudioProcessor: React.FC = () => {
                 {splitMode === 'manual' && (
                   <div className="space-y-4">
                     <div className="text-center">
-                      <p className="text-green-400 mb-2">
-                        ✅ Audio ready for editing!
-                      </p>
                       <p className="text-gray-300 text-sm mb-4">
-                        Use WaveSurfer.js to create regions and export your selections
+                        Use yellow frame to create regions and import your selections
                       </p>
                     </div>
                     
