@@ -277,10 +277,23 @@ app.get('/stream', async (req, res) => {
     return res.status(400).json({ error: 'Missing url' });
   }
   try {
-    // Resolve to a direct audio URL first
+    // Check if this is already a direct media URL (from /resolve endpoint)
+    const isDirectUrl = sourceUrl.includes('googlevideo.com') || 
+                       sourceUrl.includes('soundcloud.com') || 
+                       sourceUrl.includes('.mp3') || 
+                       sourceUrl.includes('.m4a') ||
+                       sourceUrl.includes('.webm') ||
+                       sourceUrl.includes('m3u8');
+    
     let directUrl = '';
-    try {
-      const jsonStr = await youtubedl(sourceUrl, {
+    if (isDirectUrl) {
+      // This is already a direct URL, use it directly
+      console.log('Using direct URL:', sourceUrl);
+      directUrl = sourceUrl;
+    } else {
+      // Resolve to a direct audio URL first
+      try {
+        const jsonStr = await youtubedl(sourceUrl, {
         dumpSingleJson: true,
         noWarnings: true,
         noCheckCertificates: true,
@@ -297,11 +310,12 @@ app.get('/stream', async (req, res) => {
         formats: info.formats?.length || 0,
         duration: info.duration
       });
-      const chosen = pickBestProgressiveAudio(info);
-      console.log('Chosen format:', chosen);
-      if (chosen?.url) directUrl = chosen.url;
-    } catch (err) {
-      console.error('yt-dlp JSON parsing failed:', err.message);
+        const chosen = pickBestProgressiveAudio(info);
+        console.log('Chosen format:', chosen);
+        if (chosen?.url) directUrl = chosen.url;
+      } catch (err) {
+        console.error('yt-dlp JSON parsing failed:', err.message);
+      }
     }
     if (!directUrl) {
       try {

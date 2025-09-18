@@ -183,7 +183,13 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       audio.pause();
       setIsPlaying(false);
     } else {
-      audio.play();
+      // Handle autoplay restrictions
+      audio.play().catch(error => {
+        console.error('Audio play failed:', error);
+        setIsPlaying(false);
+        // Show user-friendly error message
+        alert('Audio playback failed. Please try clicking the play button again.');
+      });
       setIsPlaying(true);
     }
   };
@@ -234,6 +240,14 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
         src={directAudioUrl ? `http://localhost:3001/stream?url=${encodeURIComponent(directAudioUrl)}` : undefined}
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
         onEnded={() => setIsPlaying(false)}
+        onError={(e) => {
+          console.error('Audio error:', e);
+          setIsPlaying(false);
+        }}
+        onLoadStart={() => console.log('Audio loading started')}
+        onCanPlay={() => console.log('Audio can play')}
+        preload="metadata"
+        crossOrigin="anonymous"
         className="hidden"
       />
 
@@ -276,10 +290,20 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
         <div className="flex items-center justify-center gap-4 mb-4">
           <Button
             onClick={togglePlay}
-            className="bg-blue-600 hover:bg-blue-700"
+            disabled={isLoading || !directAudioUrl}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
           >
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            {isPlaying ? 'Pause' : 'Play'}
+            {isLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Loading...
+              </>
+            ) : (
+              <>
+                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                {isPlaying ? 'Pause' : 'Play'}
+              </>
+            )}
           </Button>
           
         </div>
