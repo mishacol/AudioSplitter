@@ -206,6 +206,13 @@ app.post('/resolve', async (req, res) => {
       console.log('yt-dlp info parsed successfully, formats count:', info?.formats?.length || 0);
       const chosen = pickBestProgressiveAudio(info);
       console.log('pickBestProgressiveAudio result:', chosen);
+      console.log('Available metadata:', {
+        title: info?.title,
+        duration: info?.duration,
+        thumbnail: info?.thumbnail,
+        format: chosen?.ext,
+        bitrate: chosen?.abr
+      });
       if (chosen?.url) {
         let durationVal = info?.duration || null;
         if (!durationVal) {
@@ -213,7 +220,24 @@ app.post('/resolve', async (req, res) => {
             durationVal = await probeDurationWithFfprobe(chosen.url);
           } catch {}
         }
-        return res.json({ url: chosen.url, duration: durationVal || null, title: info?.title || null, is_progressive: true });
+        // Calculate file size estimate based on duration and bitrate
+        let fileSizeEstimate = null;
+        if (durationVal && chosen.abr) {
+          // Rough estimate: bitrate (kbps) * duration (seconds) / 8 (bits to bytes) / 1024 (KB to MB)
+          const sizeInMB = (parseFloat(chosen.abr) * durationVal) / (8 * 1024);
+          fileSizeEstimate = sizeInMB > 1 ? `${sizeInMB.toFixed(1)} MB` : `${(sizeInMB * 1024).toFixed(0)} KB`;
+        }
+        
+        return res.json({ 
+          url: chosen.url, 
+          duration: durationVal || null, 
+          title: info?.title || null, 
+          is_progressive: true,
+          format: chosen.ext || null,
+          bitrate: chosen.abr || null,
+          fileSize: fileSizeEstimate,
+          thumbnail: info?.thumbnail || info?.thumbnails?.[0]?.url || null
+        });
       }
       // Return duration even if we couldn't choose a progressive URL
       let durationOnly = info?.duration || 0;
@@ -226,7 +250,15 @@ app.post('/resolve', async (req, res) => {
         }
       }
       if (durationOnly) {
-        return res.json({ url: null, duration: durationOnly, title: info?.title || null, is_progressive: false });
+        return res.json({ 
+          url: null, 
+          duration: durationOnly, 
+          title: info?.title || null, 
+          is_progressive: false,
+          format: null,
+          bitrate: null,
+          fileSize: null
+        });
       }
     } catch (e) {
       console.error('youtubedl JSON parsing failed:', e.message);
@@ -250,11 +282,27 @@ app.post('/resolve', async (req, res) => {
         if (looksSegmented) {
           // Estimate duration from HLS manifest if possible
           const est = await estimateHlsDurationFromManifest(directUrl);
-          return res.json({ url: directUrl, duration: est || null, title: null, is_progressive: false });
+          return res.json({ 
+            url: directUrl, 
+            duration: est || null, 
+            title: null, 
+            is_progressive: false,
+            format: null,
+            bitrate: null,
+            fileSize: null
+          });
         }
         // Progressive: try to probe duration
         const probed = await probeDurationWithFfprobe(directUrl);
-        return res.json({ url: directUrl, duration: probed || null, title: null, is_progressive: true });
+        return res.json({ 
+          url: directUrl, 
+          duration: probed || null, 
+          title: null, 
+          is_progressive: true,
+          format: null,
+          bitrate: null,
+          fileSize: null
+        });
       }
     } catch (e) {
       // ignore, handled below

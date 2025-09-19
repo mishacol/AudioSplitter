@@ -190,6 +190,61 @@ processor = AudioProcessor()
 def home():
     return jsonify({'message': 'Python Audio Processor API'})
 
+@app.route('/metadata', methods=['POST'])
+def extract_metadata():
+    """Extract metadata from URL using yt-dlp without downloading"""
+    try:
+        data = request.get_json()
+        url = data.get('url')
+        
+        if not url:
+            return jsonify({'error': 'No URL provided'}), 400
+        
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            print(f"Extracting metadata from: {url}")
+            info = ydl.extract_info(url, download=False)
+            print(f"Extraction successful, info keys: {list(info.keys()) if info else 'None'}")
+            if 'entries' in info:  # For playlists, take first entry
+                info = info['entries'][0]
+                print(f"Using first playlist entry")
+            
+            # Extract key fields - match frontend expectations
+            metadata = {
+                'title': info.get('title', 'Unknown'),
+                'album': info.get('album', 'Unknown') or info.get('playlist', 'Unknown'),
+                'author': info.get('uploader', 'Unknown') or info.get('artist', 'Unknown'),
+                'duration': info.get('duration', 0),  # In seconds
+                'thumbnail': info.get('thumbnail', None),
+                'filesize': info.get('filesize', None) or info.get('filesize_approx', None),
+                'url': url,  # Original URL for loading audio later
+                'direct_audio_url': url,  # Use original URL since we'll stream it
+                'format': info.get('ext', 'Unknown'),
+                'bitrate': info.get('abr', 'Unknown'),
+                'filesize_bytes': info.get('filesize', None) or info.get('filesize_approx', None)
+            }
+            
+            # Format file size if available
+            if metadata['filesize_bytes']:
+                size_bytes = metadata['filesize_bytes']
+                if size_bytes > 1024 * 1024:  # MB
+                    metadata['filesize_formatted'] = f"{size_bytes / (1024 * 1024):.1f} MB"
+                else:  # KB
+                    metadata['filesize_formatted'] = f"{size_bytes / 1024:.0f} KB"
+            else:
+                metadata['filesize_formatted'] = 'Unknown'
+            
+            return jsonify(metadata)
+            
+    except Exception as e:
+        print(f"Error extracting metadata: {e}")
+        return jsonify({'error': 'Failed to extract metadata'}), 500
+
 @app.route('/process-audio', methods=['POST'])
 def process_audio():
     """Process audio file and return waveform data"""

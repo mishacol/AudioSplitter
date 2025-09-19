@@ -24,11 +24,28 @@ const AudioProcessor: React.FC = () => {
   const [volume, setVolume] = useState(1);
   const [isResolving, setIsResolving] = useState(false);
   const [resolveProgress, setResolveProgress] = useState(0);
+  const [trackTitle, setTrackTitle] = useState<string | null>(null);
+  const [audioFormat, setAudioFormat] = useState<string | null>(null);
+  const [audioBitrate, setAudioBitrate] = useState<string | null>(null);
+  const [fileSize, setFileSize] = useState<string | null>(null);
+  const [trackImage, setTrackImage] = useState<string | null>(null);
 
   // Resolve audio URL immediately when audioUrl changes (like Manual Split)
   useEffect(() => {
     const resolveUrl = async () => {
       if (audioUrl && isStreamingPlatformUrl(audioUrl)) {
+        // Clear previous state first
+        setAudioFetched(false);
+        setTrackTitle(null);
+        setAudioFormat(null);
+        setAudioBitrate(null);
+        setFileSize(null);
+        setTrackImage(null);
+        setDuration(0);
+        setCurrentTime(0);
+        setIsPlaying(false);
+        setResolvedAudioUrl(null);
+        
         setIsResolving(true);
         setResolveProgress(0);
         console.log('Auto-resolving URL:', audioUrl);
@@ -37,26 +54,65 @@ const AudioProcessor: React.FC = () => {
         const progressInterval = setInterval(() => {
           setResolveProgress(prev => {
             if (prev >= 90) return prev;
-            return prev + Math.random() * 15;
+            return Math.min(prev + Math.random() * 15, 90);
           });
         }, 200);
         
         try {
-          const resolved = await resolveStreamingUrl(audioUrl);
+          console.log('Starting metadata extraction for:', audioUrl);
+          
+          // Set up a timeout for metadata extraction
+          const metadataPromise = resolveStreamingUrl(audioUrl);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Metadata extraction timeout')), 10000)
+          );
+          
+          const resolved = await Promise.race([metadataPromise, timeoutPromise]) as { url: string | null; duration?: number | null; is_progressive?: boolean | null; title?: string | null; format?: string | null; bitrate?: string | null; fileSize?: string | null; thumbnail?: string | null } | null;
           clearInterval(progressInterval);
           setResolveProgress(100);
+          
+          console.log('Metadata extraction result:', resolved);
           
           if (resolved?.url) {
             setResolvedAudioUrl(resolved.url);
             if (resolved.duration) {
               setDuration(resolved.duration);
             }
+            if (resolved.title) {
+              setTrackTitle(resolved.title);
+            }
+            if (resolved.format) {
+              setAudioFormat(resolved.format);
+            }
+            if (resolved.bitrate) {
+              setAudioBitrate(resolved.bitrate);
+            }
+            if (resolved.fileSize) {
+              setFileSize(resolved.fileSize);
+            }
+            if (resolved.thumbnail) {
+              setTrackImage(resolved.thumbnail);
+            }
             setAudioFetched(true);
             console.log('Auto-resolved URL:', resolved.url);
+          } else {
+            // Fallback: use Node.js streaming directly
+            console.log('Metadata extraction failed, using direct streaming');
+            const streamUrl = `http://localhost:3001/stream?url=${encodeURIComponent(audioUrl)}`;
+            setResolvedAudioUrl(streamUrl);
+            setAudioFetched(true);
+            setResolveProgress(100);
           }
         } catch (error) {
           clearInterval(progressInterval);
           console.error('URL resolution failed:', error);
+          
+          // Fallback: use Node.js streaming directly
+          console.log('Using fallback streaming approach');
+          const streamUrl = `http://localhost:3001/stream?url=${encodeURIComponent(audioUrl)}`;
+          setResolvedAudioUrl(streamUrl);
+          setAudioFetched(true);
+          setResolveProgress(100);
         } finally {
           setTimeout(() => {
             setIsResolving(false);
@@ -93,20 +149,47 @@ const AudioProcessor: React.FC = () => {
     }
   };
 
-  const resolveStreamingUrl = async (url: string): Promise<{ url: string | null; duration?: number | null; is_progressive?: boolean | null; title?: string | null } | null> => {
+  const resolveStreamingUrl = async (url: string): Promise<{ url: string | null; duration?: number | null; is_progressive?: boolean | null; title?: string | null; format?: string | null; bitrate?: string | null; fileSize?: string | null; thumbnail?: string | null } | null> => {
     try {
-      const response = await fetch('http://localhost:3001/resolve', {
+      console.log('Fetching metadata from Python backend for:', url);
+      // Use Python backend for metadata extraction
+      const response = await fetch('http://localhost:5000/metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
       });
-      if (!response.ok) return null;
-      const data = await response.json();
-      if (typeof data?.url === 'string' || typeof data?.duration === 'number') {
-        return { url: data?.url ?? null, duration: data?.duration, is_progressive: data?.is_progressive ?? null, title: data?.title ?? null };
+      
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('HTTP error:', response.status, errorText);
+        return null;
       }
-      return null;
-    } catch {
+      
+      const data = await response.json();
+      console.log('Received metadata:', data);
+      
+      if (data.error) {
+        console.error('Backend error:', data.error);
+        return null;
+      }
+      
+      // For YouTube/SoundCloud, use the Node.js streaming server
+      const streamUrl = data?.url ? `http://localhost:3001/stream?url=${encodeURIComponent(data.url)}` : null;
+      
+      return { 
+        url: streamUrl, 
+        duration: data?.duration ?? null, 
+        is_progressive: true, 
+        title: data?.title ?? null,
+        format: data?.format ?? null,
+        bitrate: data?.bitrate ?? null,
+        fileSize: data?.filesize_formatted ?? null,
+        thumbnail: data?.thumbnail ?? null
+      };
+    } catch (error) {
+      console.error('Network error:', error);
       return null;
     }
   };
@@ -381,6 +464,14 @@ const AudioProcessor: React.FC = () => {
                 placeholder="Paste Audio URL"
                 value={audioUrl}
                 onChange={(e) => setAudioUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && audioUrl.trim()) {
+                    // Trigger URL processing by clearing and setting the same URL
+                    const currentUrl = audioUrl;
+                    setAudioUrl('');
+                    setTimeout(() => setAudioUrl(currentUrl), 10);
+                  }
+                }}
                 className="w-full bg-gray-700 border-gray-600 text-white"
               />
               <p className="mt-2 text-xs text-gray-400">
@@ -435,6 +526,69 @@ const AudioProcessor: React.FC = () => {
               <h2 className="text-4xl font-bold text-white text-center mb-12">
                 Audio Preview
               </h2>
+              
+              {/* Track Metadata */}
+              {audioFetched && (
+                <div className="mb-8 bg-gray-700/50 rounded-lg p-6">
+                  {/* Track Image and Metadata Grid */}
+                  <div className="flex items-start gap-6">
+                    {trackImage && (
+                      <div className="flex-shrink-0">
+                        <img 
+                          src={trackImage} 
+                          alt="Track cover" 
+                          className="w-20 h-20 rounded-lg object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Horizontal metadata grid - all in one line */}
+                    <div className="flex-1 flex gap-6">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-gray-400 mb-1">Title</div>
+                        <div className="text-white font-medium text-xs truncate" title={trackTitle || 'Unknown Title'}>
+                          {trackTitle || 'Unknown Title'}
+                        </div>
+                      </div>
+                      
+                      <div className="flex-shrink-0">
+                        <div className="text-xs text-gray-400 mb-1">Length</div>
+                        <div className="text-white font-medium text-xs">
+                          {formatTime(duration)}
+                        </div>
+                      </div>
+                      
+                      <div className="flex-shrink-0">
+                        <div className="text-xs text-gray-400 mb-1">Format</div>
+                        <div className="text-white font-medium text-xs">
+                          {audioFormat ? audioFormat.toUpperCase() : 'Unknown'}
+                        </div>
+                      </div>
+                      
+                      {audioBitrate && (
+                        <div className="flex-shrink-0">
+                          <div className="text-xs text-gray-400 mb-1">Quality</div>
+                          <div className="text-white font-medium text-xs">
+                            {audioBitrate} kbps
+                          </div>
+                        </div>
+                      )}
+                      
+                      {fileSize && (
+                        <div className="flex-shrink-0">
+                          <div className="text-xs text-gray-400 mb-1">File Size</div>
+                          <div className="text-white font-medium text-xs">
+                            {fileSize}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* Waveform Visualization */}
               <div className="mb-8">
