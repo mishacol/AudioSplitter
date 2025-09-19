@@ -179,8 +179,8 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     // Clear canvas
     ctx.clearRect(0, 0, width, height);
 
-    // Add padding for handles (16px on each side so progress bar is right at handle inner edge)
-    const handlePadding = 16;
+    // Add padding for handles (8px on each side so progress bar is right at handle inner edge)
+    const handlePadding = 8;
     const waveformWidth = width - (handlePadding * 2);
 
     // Draw waveform as bars (like real audio editors)
@@ -205,7 +205,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     
     // Draw progress line
     ctx.strokeStyle = '#FF4444'; // Red progress line
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 6;
     ctx.beginPath();
     ctx.moveTo(progressX, 0);
     ctx.lineTo(progressX, height);
@@ -241,59 +241,59 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       // Draw 3D handles with shadows and gradients
       const centerY = height / 2;
       
-      // Left handle - 3D effect with shadow (x2 thinner)
+      // Left handle - 3D effect with shadow (positioned so inner edge aligns with progress bar)
       // Shadow
       ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
       ctx.fillRect(startX - 6, 2, 16, height - 2);
       
-      // Main handle with gradient
-      const leftGradient = ctx.createLinearGradient(startX - 8, 0, startX + 8, 0);
+      // Main handle with gradient (shifted left so inner edge is at startX)
+      const leftGradient = ctx.createLinearGradient(startX - 16, 0, startX, 0);
       leftGradient.addColorStop(0, '#FFA500'); // Orange highlight
       leftGradient.addColorStop(0.3, '#FFD700'); // Gold
       leftGradient.addColorStop(0.7, '#DAA520'); // Darker gold
       leftGradient.addColorStop(1, '#B8860B'); // Dark gold shadow
       ctx.fillStyle = leftGradient;
-      ctx.fillRect(startX - 8, 0, 16, height);
+      ctx.fillRect(startX - 16, 0, 16, height);
       
       // Inner highlight
       ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.fillRect(startX - 6, 2, 12, height / 3);
+      ctx.fillRect(startX - 14, 2, 12, height / 3);
       
-      // Center grip texture
+      // Center grip texture (centered in handle)
       ctx.fillStyle = '#8B6914';
-      ctx.fillRect(startX - 1, centerY - 8, 2, 16);
+      ctx.fillRect(startX - 9, centerY - 8, 2, 16);
       
       // Grip highlights
       ctx.fillStyle = '#DAA520';
-      ctx.fillRect(startX - 0.5, centerY - 7, 0.5, 14);
-      ctx.fillRect(startX + 0.5, centerY - 7, 0.5, 14);
+      ctx.fillRect(startX - 8.5, centerY - 7, 0.5, 14);
+      ctx.fillRect(startX - 7.5, centerY - 7, 0.5, 14);
       
-      // Right handle - 3D effect with shadow (x2 thinner)
+      // Right handle - 3D effect with shadow (positioned so inner edge aligns with progress bar)
       // Shadow
       ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
       ctx.fillRect(endX - 6, 2, 16, height - 2);
       
-      // Main handle with gradient
-      const rightGradient = ctx.createLinearGradient(endX - 8, 0, endX + 8, 0);
+      // Main handle with gradient (shifted right so inner edge is at endX)
+      const rightGradient = ctx.createLinearGradient(endX, 0, endX + 16, 0);
       rightGradient.addColorStop(0, '#FFA500'); // Orange highlight
       rightGradient.addColorStop(0.3, '#FFD700'); // Gold
       rightGradient.addColorStop(0.7, '#DAA520'); // Darker gold
       rightGradient.addColorStop(1, '#B8860B'); // Dark gold shadow
       ctx.fillStyle = rightGradient;
-      ctx.fillRect(endX - 8, 0, 16, height);
+      ctx.fillRect(endX, 0, 16, height);
       
       // Inner highlight
       ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.fillRect(endX - 6, 2, 12, height / 3);
+      ctx.fillRect(endX + 2, 2, 12, height / 3);
       
-      // Center grip texture
+      // Center grip texture (centered in handle)
       ctx.fillStyle = '#8B6914';
-      ctx.fillRect(endX - 1, centerY - 8, 2, 16);
+      ctx.fillRect(endX + 7, centerY - 8, 2, 16);
       
       // Grip highlights
       ctx.fillStyle = '#DAA520';
-      ctx.fillRect(endX - 0.5, centerY - 7, 0.5, 14);
-      ctx.fillRect(endX + 0.5, centerY - 7, 0.5, 14);
+      ctx.fillRect(endX + 7.5, centerY - 7, 0.5, 14);
+      ctx.fillRect(endX + 8.5, centerY - 7, 0.5, 14);
     }
 
 
@@ -359,7 +359,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     const y = e.clientY - rect.top;
     
     // Calculate time at mouse position accounting for handle padding
-    const handlePadding = 16;
+    const handlePadding = 8;
     const waveformWidth = rect.width - (handlePadding * 2);
     const adjustedX = Math.max(handlePadding, Math.min(rect.width - handlePadding, x));
     const timeAtMouse = Math.max(0, Math.min(duration, ((adjustedX - handlePadding) / waveformWidth) * duration));
@@ -388,7 +388,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     const rect = canvas.getBoundingClientRect();
     const canvasX = x;
     const handleWidth = 20; // Detection area for x2 thinner handles
-    const handlePadding = 16;
+    const handlePadding = 8;
     const waveformWidth = rect.width - (handlePadding * 2);
     
     const startX = handlePadding + (selectionStart / duration) * waveformWidth;
@@ -410,7 +410,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     // Calculate time at mouse position accounting for handle padding
-    const handlePadding = 16;
+    const handlePadding = 8;
     const waveformWidth = rect.width - (handlePadding * 2);
     const adjustedX = Math.max(handlePadding, Math.min(rect.width - handlePadding, x));
     const timeAtMouse = Math.max(0, Math.min(duration, ((adjustedX - handlePadding) / waveformWidth) * duration));
@@ -449,7 +449,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     // Calculate time at mouse position accounting for handle padding
-    const handlePadding = 16;
+    const handlePadding = 8;
     const waveformWidth = rect.width - (handlePadding * 2);
     const adjustedX = Math.max(handlePadding, Math.min(rect.width - handlePadding, x));
     const timeAtMouse = Math.max(0, Math.min(duration, ((adjustedX - handlePadding) / waveformWidth) * duration));
@@ -489,7 +489,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     // Calculate time at mouse position accounting for handle padding
-    const handlePadding = 16;
+    const handlePadding = 8;
     const waveformWidth = rect.width - (handlePadding * 2);
     const adjustedX = Math.max(handlePadding, Math.min(rect.width - handlePadding, x));
     const timeAtMouse = Math.max(0, Math.min(duration, ((adjustedX - handlePadding) / waveformWidth) * duration));
