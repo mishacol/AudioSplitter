@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Wand2, Scissors, Loader2 } from 'lucide-react';
+import { Download, Wand2, Scissors, Loader2, ArrowLeft } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import ManualSplitEditor from './ManualSplitEditor';
@@ -30,6 +30,16 @@ const AudioProcessor: React.FC = () => {
   const [fileSize, setFileSize] = useState<string | null>(null);
   const [trackImage, setTrackImage] = useState<string | null>(null);
 
+  // Function to stop playback and reset audio state
+  const stopPlayback = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
   // Resolve audio URL immediately when audioUrl changes (like Manual Split)
   useEffect(() => {
     const resolveUrl = async () => {
@@ -45,6 +55,7 @@ const AudioProcessor: React.FC = () => {
         setCurrentTime(0);
         setIsPlaying(false);
         setResolvedAudioUrl(null);
+        setSplitMode(null); // Reset split mode when processing new URL
         
         setIsResolving(true);
         setResolveProgress(0);
@@ -522,8 +533,8 @@ const AudioProcessor: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Beautiful Preview & Download Section - Shows loading state or after audio is fetched */}
-          {(isProcessing || audioFetched) && (
+          {/* Beautiful Preview & Download Section - Shows loading state or after audio is fetched, but hides when split mode is active */}
+          {(isProcessing || audioFetched) && !splitMode && (
             <div className="bg-gray-800 rounded-2xl p-8 border border-gray-700">
               <h2 className="text-4xl font-bold text-white text-center mb-12">
                 Audio Preview
@@ -716,7 +727,10 @@ const AudioProcessor: React.FC = () => {
                 <div className="flex gap-4 justify-center">
                   <Button
                     variant={splitMode === 'automatic' ? 'default' : 'outline'}
-                    onClick={() => setSplitMode('automatic')}
+                    onClick={() => {
+                      stopPlayback();
+                      setSplitMode('automatic');
+                    }}
                     className={`flex items-center gap-2 ${
                       splitMode === 'automatic' 
                         ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' 
@@ -728,16 +742,29 @@ const AudioProcessor: React.FC = () => {
                   </Button>
                   <Button
                     variant={splitMode === 'manual' ? 'default' : 'outline'}
-                    onClick={() => setSplitMode('manual')}
+                    onClick={() => {
+                      stopPlayback();
+                      setSplitMode('manual');
+                    }}
                     className={`flex items-center gap-2 ${
                       splitMode === 'manual' 
-                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' 
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
                         : ''
                     }`}
                   >
                     <Scissors className="h-4 w-4" />
                     Manual Split
                   </Button>
+                  {splitMode && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setSplitMode(null)}
+                      className="flex items-center gap-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to Preview
+                    </Button>
+                  )}
                 </div>
 
                 {/* Manual Split Controls */}
