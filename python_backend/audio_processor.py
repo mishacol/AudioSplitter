@@ -200,34 +200,56 @@ def extract_metadata():
         if not url:
             return jsonify({'error': 'No URL provided'}), 400
         
+        print(f"Fetching metadata for URL: {url}")  # Debug log
+        
         ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
-            'extract_flat': False,
+            'quiet': False,  # Enable verbose for logs
+            'no_warnings': False,
+            'extract_flat': False,  # Full extraction for metadata
+            'skip_download': True,
+            'sleep_interval': 1,  # Avoid rate limits
+            'max_sleep_interval': 5,
+            'extractor_args': {
+                'youtube': [
+                    'skip=hls,no_check_certificate'  # Skip HLS and cert issues
+                ]
+            },
+            'format': 'bestaudio[ext=m4a]/bestaudio/best',  # Prefer M4A audio
+            'noplaylist': True,  # Only extract first video, not entire playlist
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            print(f"Extracting metadata from: {url}")
             info = ydl.extract_info(url, download=False)
-            print(f"Extraction successful, info keys: {list(info.keys()) if info else 'None'}")
-            if 'entries' in info:  # For playlists, take first entry
-                info = info['entries'][0]
-                print(f"Using first playlist entry")
+            print(f"Raw info keys: {list(info.keys()) if info else 'None'}")  # Debug: Check extracted fields
             
-            # Extract key fields - match frontend expectations
+            if 'entries' in info and info['entries']:
+                entry = info['entries'][0]  # Take first for radio/playlist
+                print(f"Using entry[0]: {entry.get('title', 'No title')}")  # Debug
+                info = entry
+            
+            # Enhanced field extraction
             metadata = {
-                'title': info.get('title', 'Unknown'),
-                'album': info.get('album', 'Unknown') or info.get('playlist', 'Unknown'),
-                'author': info.get('uploader', 'Unknown') or info.get('artist', 'Unknown'),
-                'duration': info.get('duration', 0),  # In seconds
-                'thumbnail': info.get('thumbnail', None),
-                'filesize': info.get('filesize', None) or info.get('filesize_approx', None),
-                'url': url,  # Original URL for loading audio later
-                'direct_audio_url': url,  # Use original URL since we'll stream it
-                'format': info.get('ext', 'Unknown'),
+                'title': info.get('title', 'Unknown Title'),
+                'album': info.get('album', info.get('playlist_title', 'Unknown Album')),
+                'author': info.get('uploader', info.get('channel', info.get('artist', 'Unknown Artist'))),
+                'duration': info.get('duration', 0),
+                'thumbnail': info.get('thumbnail', info.get('webpage_url', '')) or None,
+                'filesize': info.get('filesize_approx', info.get('filesize', 'Unknown Size')),
+                'format': info.get('ext', 'Unknown Format'),  # e.g., 'm4a'
+                'url': url,
+                'direct_audio_url': None,
                 'bitrate': info.get('abr', 'Unknown'),
-                'filesize_bytes': info.get('filesize', None) or info.get('filesize_approx', None)
+                'filesize_bytes': info.get('filesize_approx', info.get('filesize', None))
             }
+            
+            # Try to get direct audio URL from formats
+            if 'formats' in info:
+                audio_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
+                if audio_formats:
+                    best_audio = max(audio_formats, key=lambda f: f.get('abr', 0))  # Highest bitrate
+                    metadata['direct_audio_url'] = best_audio.get('url')
+                    metadata['format'] = best_audio.get('ext', metadata['format'])
+                    print(f"Selected audio format: {metadata['format']}")  # Debug
             
             # Format file size if available
             if metadata['filesize_bytes']:
@@ -239,11 +261,13 @@ def extract_metadata():
             else:
                 metadata['filesize_formatted'] = 'Unknown'
             
+            print(f"Final metadata: {json.dumps(metadata, indent=2)}")  # Debug log
             return jsonify(metadata)
             
     except Exception as e:
-        print(f"Error extracting metadata: {e}")
-        return jsonify({'error': 'Failed to extract metadata'}), 500
+        error_msg = f'Failed to fetch metadata: {str(e)}. Try updating yt-dlp or checking URL access.'
+        print(f"ERROR: {error_msg}")  # Log error
+        return jsonify({'error': error_msg}), 500
 
 @app.route('/process-audio', methods=['POST'])
 def process_audio():

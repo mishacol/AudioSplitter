@@ -64,7 +64,7 @@ const AudioProcessor: React.FC = () => {
           // Set up a timeout for metadata extraction
           const metadataPromise = resolveStreamingUrl(audioUrl);
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Metadata extraction timeout')), 10000)
+            setTimeout(() => reject(new Error('Metadata extraction timeout')), 30000)
           );
           
           const resolved = await Promise.race([metadataPromise, timeoutPromise]) as { url: string | null; duration?: number | null; is_progressive?: boolean | null; title?: string | null; format?: string | null; bitrate?: string | null; fileSize?: string | null; thumbnail?: string | null } | null;
@@ -95,10 +95,11 @@ const AudioProcessor: React.FC = () => {
             }
             setAudioFetched(true);
             console.log('Auto-resolved URL:', resolved.url);
-          } else {
+          } else if (!resolved) {
             // Fallback: use Node.js streaming directly
-            console.log('Metadata extraction failed, using direct streaming');
+            console.log('🔍 Metadata extraction failed, using direct streaming fallback');
             const streamUrl = `http://localhost:3001/stream?url=${encodeURIComponent(audioUrl)}`;
+            console.log('🔍 Fallback stream URL:', streamUrl);
             setResolvedAudioUrl(streamUrl);
             setAudioFetched(true);
             setResolveProgress(100);
@@ -168,7 +169,8 @@ const AudioProcessor: React.FC = () => {
       }
       
       const data = await response.json();
-      console.log('Received metadata:', data);
+      console.log('🔍 Backend metadata response:', data);
+      console.log('🔍 Available keys:', Object.keys(data));
       
       if (data.error) {
         console.error('Backend error:', data.error);
@@ -502,7 +504,7 @@ const AudioProcessor: React.FC = () => {
                 className="hidden" 
                 preload="auto" 
                 crossOrigin="anonymous"
-                src={resolvedAudioUrl ? `http://localhost:3001/stream?url=${encodeURIComponent(resolvedAudioUrl)}` : undefined}
+                src={resolvedAudioUrl ? (resolvedAudioUrl.startsWith("http://localhost:3001/stream") ? resolvedAudioUrl : `http://localhost:3001/stream?url=${encodeURIComponent(resolvedAudioUrl)}`) : undefined}
                 onLoadStart={() => {
                   console.log('Audio loading started');
                   setAudioLoading(true);
