@@ -547,9 +547,9 @@ const AudioProcessor: React.FC = () => {
                       </div>
                     )}
                     
-                    {/* Horizontal metadata grid - all in one line */}
-                    <div className="flex-1 flex gap-6">
-                      <div className="flex-1 min-w-0">
+                    {/* Compact metadata grid - optimized layout */}
+                    <div className="flex-1 flex flex-wrap gap-4">
+                      <div className="flex-1 min-w-0 max-w-xs">
                         <div className="text-xs text-gray-400 mb-1">Title</div>
                         <div className="text-white font-medium text-xs truncate" title={trackTitle || 'Unknown Title'}>
                           {trackTitle || 'Unknown Title'}
