@@ -189,7 +189,7 @@ const AudioProcessor: React.FC = () => {
       }
       
       // For YouTube/SoundCloud, use the Node.js streaming server
-      const streamUrl = data?.url ? `http://localhost:3001/stream?url=${encodeURIComponent(data.url)}` : null;
+      const streamUrl = data?.direct_audio_url ? `http://localhost:3001/stream?url=${encodeURIComponent(data.direct_audio_url)}` : null;
       
       return { 
         url: streamUrl, 
