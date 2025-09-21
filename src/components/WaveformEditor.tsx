@@ -1,190 +1,201 @@
-import React, { useEffect, useRef, useState } from 'react';
-import WaveSurfer from 'wavesurfer.js';
-import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js';
+import React, { useState } from 'react';
+import CompetitorWaveform from './CompetitorWaveform';
 
 interface WaveformEditorProps {
-  audioBlobUrl: string;
-  onSplitPointAdd: (time: number) => void;
-  onSplitPointRemove: (index: number) => void;
-  splitPoints: number[];
-  onSeek: (time: number) => void;
-  onPlayPause: () => void;
+  audioUrl: string;
   duration: number;
+  onExport?: (startTime: number, endTime: number, format: string, fadeIn: boolean, fadeOut: boolean) => void;
 }
 
 const WaveformEditor: React.FC<WaveformEditorProps> = ({
-  audioBlobUrl,
-  onSplitPointAdd,
-  onSplitPointRemove,
-  splitPoints,
-  onSeek,
-  onPlayPause,
+  audioUrl,
   duration,
+  onExport
 }) => {
-  const waveformRef = useRef<HTMLDivElement>(null);
-  const wavesurferRef = useRef<WaveSurfer | null>(null);
-  const regionsRef = useRef<any[]>([]);
-  const [isReady, setIsReady] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [selectionStart, setSelectionStart] = useState(0);
+  const [selectionEnd, setSelectionEnd] = useState(duration);
+  const [action, setAction] = useState<'extract' | 'delete'>('extract');
+  const [format, setFormat] = useState('mp3');
+  const [fadeIn, setFadeIn] = useState(false);
+  const [fadeOut, setFadeOut] = useState(false);
 
-  useEffect(() => {
-    if (!waveformRef.current || !audioBlobUrl) return;
-
-    // Initialize WaveSurfer
-    const wavesurfer = WaveSurfer.create({
-      container: waveformRef.current,
-      waveColor: '#4F46E5',
-      progressColor: '#7C3AED',
-      cursorColor: '#F59E0B',
-      barWidth: 2,
-      barRadius: 3,
-      height: 120,
-      normalize: true,
-      backend: 'WebAudio',
-      mediaControls: false,
-    });
-
-    // Add regions plugin for split points
-    const regions = wavesurfer.registerPlugin(RegionsPlugin.create());
-
-    wavesurferRef.current = wavesurfer;
-
-    // Load audio
-    wavesurfer.load(audioBlobUrl);
-
-    // Event listeners
-    wavesurfer.on('ready', () => {
-      setIsReady(true);
-      console.log('Waveform ready');
-    });
-
-    wavesurfer.on('audioprocess', (time: number) => {
-      onSeek(time);
-    });
-
-    wavesurfer.on('interaction', (time: number) => {
-      onSeek(time);
-    });
-
-    wavesurfer.on('play', () => {
-      onPlayPause();
-    });
-
-    wavesurfer.on('pause', () => {
-      onPlayPause();
-    });
-
-    // Handle click to add split point
-    wavesurfer.on('click', (relativeX: number) => {
-      const clickTime = relativeX * duration;
-      onSplitPointAdd(clickTime);
-    });
-
-    return () => {
-      wavesurfer.destroy();
-      setIsReady(false);
-    };
-  }, [audioBlobUrl, duration]);
-
-  // Update regions when split points change
-  useEffect(() => {
-    if (!wavesurferRef.current || !isReady) return;
-
-    const wavesurfer = wavesurferRef.current;
-    const regions = wavesurfer.getActivePlugins()[0] as any; // Regions plugin
-
-    // Clear existing regions
-    regionsRef.current.forEach(region => region.remove());
-    regionsRef.current = [];
-
-    // Add new regions for split points
-    splitPoints.forEach((point, index) => {
-      const region = regions.addRegion({
-        start: point,
-        end: point + 0.1, // Small region to show the split point
-        color: 'rgba(239, 68, 68, 0.3)',
-        drag: true,
-        resize: false,
-      });
-
-      // Add region label
-      const label = document.createElement('div');
-      label.textContent = `${index + 1}`;
-      label.style.cssText = `
-        position: absolute;
-        top: -20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #EF4444;
-        color: white;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: bold;
-        pointer-events: none;
-        z-index: 10;
-      `;
-      
-      region.element.appendChild(label);
-
-      // Handle region drag
-      region.on('update-end', () => {
-        const newTime = region.start;
-        onSplitPointRemove(index);
-        onSplitPointAdd(newTime);
-      });
-
-      // Handle region click to remove
-      region.on('click', () => {
-        onSplitPointRemove(index);
-      });
-
-      regionsRef.current.push(region);
-    });
-  }, [splitPoints, isReady]);
-
-  const togglePlayPause = () => {
-    if (!wavesurferRef.current) return;
-    
-    if (wavesurferRef.current.isPlaying()) {
-      wavesurferRef.current.pause();
-    } else {
-      wavesurferRef.current.play();
-    }
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 100);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
   };
 
-  const seekTo = (time: number) => {
-    if (!wavesurferRef.current) return;
-    wavesurferRef.current.seekTo(time / duration);
+  const handleTimeUpdate = (time: number) => {
+    setCurrentTime(time);
+  };
+
+  const handleSelectionChange = (start: number, end: number) => {
+    setSelectionStart(start);
+    setSelectionEnd(end);
+  };
+
+  const handleExport = () => {
+    onExport?.(selectionStart, selectionEnd, format, fadeIn, fadeOut);
   };
 
   return (
-    <div className="w-full">
-      <div ref={waveformRef} className="w-full mb-4" />
-      
-      {/* Waveform Controls */}
-      <div className="flex items-center justify-center gap-4 mb-4">
-        <button
-          onClick={togglePlayPause}
-          className="bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 transition-colors duration-300"
-        >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-        </button>
-        
-        <div className="flex items-center gap-2">
-          <span className="text-gray-300 text-sm">Click waveform to add split points</span>
-        </div>
-      </div>
-      
-      {!isReady && (
-        <div className="text-center py-4">
-          <div className="inline-flex items-center gap-2 text-gray-400">
-            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-            Loading waveform...
+    <div className="bg-gray-900 min-h-screen">
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto">
+          
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-white mb-2">Audio Editor</h1>
+            <p className="text-gray-400">Professional audio editing with precise waveform control</p>
+          </div>
+
+          {/* Main Editor */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            {/* Waveform Area */}
+            <div className="lg:col-span-3">
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-white text-lg font-semibold mb-4">Waveform Editor</h2>
+                
+                <CompetitorWaveform
+                  audioUrl={audioUrl}
+                  duration={duration}
+                  currentTime={currentTime}
+                  isPlaying={isPlaying}
+                  onTimeUpdate={handleTimeUpdate}
+                  onSelectionChange={handleSelectionChange}
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            {/* Right Panel - Controls */}
+            <div className="lg:col-span-1">
+              <div className="bg-gray-800 rounded-lg p-6 space-y-6">
+                
+                {/* Action Selection */}
+                <div>
+                  <h3 className="text-white font-semibold mb-3">Action</h3>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="action"
+                        value="extract"
+                        checked={action === 'extract'}
+                        onChange={(e) => setAction(e.target.value as 'extract' | 'delete')}
+                        className="mr-2 text-blue-500"
+                      />
+                      <span className="text-white">Extract Selected</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="action"
+                        value="delete"
+                        checked={action === 'delete'}
+                        onChange={(e) => setAction(e.target.value as 'extract' | 'delete')}
+                        className="mr-2 text-blue-500"
+                      />
+                      <span className="text-white">Delete Selected</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Cut From */}
+                <div>
+                  <h3 className="text-white font-semibold mb-3">Cut from:</h3>
+                  <div className="flex items-center gap-2 text-sm">
+                    <input
+                      type="text"
+                      value={formatTime(selectionStart)}
+                      onChange={(e) => {
+                        // Простая валидация времени
+                        const time = parseFloat(e.target.value.replace(':', '.'));
+                        if (!isNaN(time)) setSelectionStart(time);
+                      }}
+                      className="w-20 px-2 py-1 bg-gray-700 text-white rounded text-center"
+                    />
+                    <span className="text-gray-400">to</span>
+                    <input
+                      type="text"
+                      value={formatTime(selectionEnd)}
+                      onChange={(e) => {
+                        const time = parseFloat(e.target.value.replace(':', '.'));
+                        if (!isNaN(time)) setSelectionEnd(time);
+                      }}
+                      className="w-20 px-2 py-1 bg-gray-700 text-white rounded text-center"
+                    />
+                  </div>
+                </div>
+
+                {/* Fade Options */}
+                <div>
+                  <h3 className="text-white font-semibold mb-3">Fade Options</h3>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={fadeIn}
+                        onChange={(e) => setFadeIn(e.target.checked)}
+                        className="mr-2 text-blue-500"
+                      />
+                      <span className="text-white">Fade in</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={fadeOut}
+                        onChange={(e) => setFadeOut(e.target.checked)}
+                        className="mr-2 text-blue-500"
+                      />
+                      <span className="text-white">Fade out</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Format Selection */}
+                <div>
+                  <h3 className="text-white font-semibold mb-3">Format</h3>
+                  <select
+                    value={format}
+                    onChange={(e) => setFormat(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600"
+                  >
+                    <option value="mp3">MP3</option>
+                    <option value="wav">WAV</option>
+                    <option value="flac">FLAC</option>
+                    <option value="m4a">M4A</option>
+                  </select>
+                </div>
+
+                {/* Export Button */}
+                <button
+                  onClick={handleExport}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
+                >
+                  Export
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Info */}
+          <div className="mt-6 bg-gray-800 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-gray-400">
+                Final output — {formatTime(selectionEnd - selectionStart)}
+              </div>
+              <div className="text-gray-400">
+                Format — {format.toUpperCase()}
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
