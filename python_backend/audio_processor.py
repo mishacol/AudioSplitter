@@ -232,6 +232,7 @@ def extract_metadata():
                 'title': info.get('title', 'Unknown Title'),
                 'album': info.get('album', info.get('playlist_title', 'Unknown Album')),
                 'author': info.get('uploader', info.get('channel', info.get('artist', 'Unknown Artist'))),
+                'producer': info.get('artist', info.get('uploader', info.get('channel', 'Unknown Producer'))),
                 'duration': info.get('duration', 0),
                 'thumbnail': info.get('thumbnail', info.get('webpage_url', '')) or None,
                 'filesize': info.get('filesize_approx', info.get('filesize', 'Unknown Size')),
@@ -239,7 +240,10 @@ def extract_metadata():
                 'url': url,
                 'direct_audio_url': None,
                 'bitrate': info.get('abr', 'Unknown'),
-                'filesize_bytes': info.get('filesize_approx', info.get('filesize', None))
+                'filesize_bytes': info.get('filesize_approx', info.get('filesize', None)),
+                'release_date': info.get('upload_date', info.get('release_date', info.get('release_year', None))),
+                'upload_date': info.get('upload_date', None),
+                'release_year': info.get('release_year', None)
             }
             
             # Try to get direct audio URL from formats
@@ -260,6 +264,28 @@ def extract_metadata():
                     metadata['filesize_formatted'] = f"{size_bytes / 1024:.0f} KB"
             else:
                 metadata['filesize_formatted'] = 'Unknown'
+            
+            # Format release date if available
+            if metadata['release_date']:
+                try:
+                    # Convert YYYYMMDD format to readable date
+                    if isinstance(metadata['release_date'], str) and len(metadata['release_date']) == 8:
+                        year = metadata['release_date'][:4]
+                        month = metadata['release_date'][4:6]
+                        day = metadata['release_date'][6:8]
+                        metadata['release_date_formatted'] = f"{day}.{month}.{year}"
+                    elif isinstance(metadata['release_date'], int):
+                        # Handle timestamp or year
+                        if metadata['release_date'] > 1900 and metadata['release_date'] < 2100:
+                            metadata['release_date_formatted'] = str(metadata['release_date'])
+                        else:
+                            metadata['release_date_formatted'] = 'Unknown'
+                    else:
+                        metadata['release_date_formatted'] = str(metadata['release_date'])
+                except:
+                    metadata['release_date_formatted'] = 'Unknown'
+            else:
+                metadata['release_date_formatted'] = 'Unknown'
             
             print(f"Final metadata: {json.dumps(metadata, indent=2)}")  # Debug log
             return jsonify(metadata)

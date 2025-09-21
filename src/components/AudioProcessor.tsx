@@ -30,6 +30,7 @@ const AudioProcessor: React.FC = () => {
   const [audioBitrate, setAudioBitrate] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<string | null>(null);
   const [trackImage, setTrackImage] = useState<string | null>(null);
+  const [metadata, setMetadata] = useState<any>(null);
 
   // Function to stop playback and reset audio state
   const stopPlayback = () => {
@@ -105,6 +106,8 @@ const AudioProcessor: React.FC = () => {
             if (resolved.thumbnail) {
               setTrackImage(resolved.thumbnail);
             }
+            // Save full metadata for additional fields
+            setMetadata(resolved);
             setAudioFetched(true);
             console.log('Auto-resolved URL:', resolved.url);
           } else if (!resolved) {
@@ -521,7 +524,7 @@ const AudioProcessor: React.FC = () => {
                     <div className="flex-1 flex flex-wrap gap-4">
                       <div className="flex-1 min-w-0 max-w-xs">
                         <div className="text-xs text-gray-400 mb-1">Title</div>
-                        <div className="text-white font-medium text-xs truncate" title={trackTitle || 'Unknown Title'}>
+                        <div className="text-white font-medium text-xs break-words" title={trackTitle || 'Unknown Title'}>
                           {trackTitle || 'Unknown Title'}
                         </div>
                       </div>
@@ -557,31 +560,28 @@ const AudioProcessor: React.FC = () => {
                           </div>
                         </div>
                       )}
+                      
+                      {metadata?.author && (
+                        <div className="flex-shrink-0">
+                          <div className="text-xs text-gray-400 mb-1">Author</div>
+                          <div className="text-white font-medium text-xs">
+                            {metadata.author}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {metadata?.release_date_formatted && (
+                        <div className="flex-shrink-0">
+                          <div className="text-xs text-gray-400 mb-1">Release Date</div>
+                          <div className="text-white font-medium text-xs">
+                            {metadata.release_date_formatted}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
-              
-              {/* Waveform Visualization */}
-              <div className="mb-8">
-                <div className="h-32 bg-gray-700 rounded-lg flex items-center justify-center mb-4">
-                  {isProcessing && !audioFetched ? (
-                    <div className="flex flex-col items-center justify-center space-y-4">
-                      <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
-                      <div className="text-center">
-                        <p className="text-white text-lg font-medium">Fetching Audio...</p>
-                        <p className="text-gray-300 text-sm mt-2">Please wait while we process your audio file. Long tracks may take several minutes to fetch</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <img
-                      src="https://d64gsuwffb70l.cloudfront.net/68bf327081eca654cd4e6dde_1757360817366_a5a1c9ff.webp"
-                      alt="Audio waveform"
-                      className="w-full h-full object-cover rounded-lg opacity-60"
-                    />
-                  )}
-                </div>
-              </div>
 
               {/* Player Controls */}
               <div className="flex items-center justify-between mb-6 gap-4">

@@ -22,6 +22,8 @@ interface AudioResolutionResult {
   fileSize?: string | null;
   thumbnail?: string | null;
   waveform_data?: number[]; // For SoundCloud tracks
+  author?: string | null;
+  release_date_formatted?: string | null;
 }
 
 import { SoundCloudService } from './soundcloudService';
@@ -115,9 +117,11 @@ export class AudioService {
           title: metadata.title ?? null,
           format: metadata.format ?? null,
           bitrate: metadata.bitrate ?? null,
-          fileSize: metadata.fileSize ?? null,
+          fileSize: metadata.filesize_formatted ?? null,
           thumbnail: metadata.thumbnail ?? null,
-          waveform_data: metadata.waveform_data
+          waveform_data: metadata.waveform_data,
+          author: metadata.author ?? null,
+          release_date_formatted: metadata.release_date_formatted ?? null
         };
         
         console.log('🔍 Mapped result for frontend:', result);
