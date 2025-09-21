@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Download, Play, Pause, Scissors, Square } from 'lucide-react';
+import WaveSurfer from 'wavesurfer.js';
+import Hls from 'hls.js';
 
 interface ManualSplitEditorProps {
   audioUrl: string;
@@ -16,6 +18,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
 }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const waveformRef = useRef<WaveSurfer | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [waveformData, setWaveformData] = useState<number[]>([]);
@@ -86,65 +89,186 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
   };
 
-  // Generate waveform data - use mock data for instant loading
+  // Initialize Wavesurfer.js for real waveform generation
   useEffect(() => {
+    if (!audioUrl) return;
+
     setIsLoading(true);
-    
-    // Generate realistic audio waveform with peaks, beats, and silence
-    const generateMockWaveform = () => {
-      const width = 2400;
-      const waveform = [];
-      
-      for (let i = 0; i < width; i++) {
-        let amplitude = 0;
-        
-        // Create different audio sections
-        const section = i / width;
-        
-        if (section < 0.1) {
-          // Intro - quiet
-          amplitude = Math.random() * 0.1;
-        } else if (section < 0.3) {
-          // Build up - increasing intensity
-          const intensity = (section - 0.1) / 0.2;
-          amplitude = Math.random() * intensity * 0.8;
-        } else if (section < 0.7) {
-          // Main section - strong beats and variations
-          const beat = Math.sin(i * 0.1) * 0.4;
-          const variation = Math.sin(i * 0.03) * 0.3;
-          const noise = (Math.random() - 0.5) * 0.2;
-          amplitude = Math.abs(beat + variation + noise);
-        } else if (section < 0.9) {
-          // Bridge - different pattern
-          const bridge = Math.sin(i * 0.05) * 0.6;
-          const harmonics = Math.sin(i * 0.15) * 0.2;
-          amplitude = Math.abs(bridge + harmonics);
-        } else {
-          // Outro - fade out
-          const fade = (1 - section) / 0.1;
-          amplitude = Math.random() * fade * 0.5;
-        }
-        
-        // Add some silence periods
-        if (Math.random() < 0.05) {
-          amplitude = 0;
-        }
-        
-        // Add sharp peaks
-        if (Math.random() < 0.02) {
-          amplitude = Math.random() * 0.9 + 0.1;
-        }
-        
-        waveform.push(Math.min(amplitude, 1));
+    console.log('🎵 Initializing Wavesurfer.js for:', audioUrl);
+
+    // Destroy existing instance if any
+    if (waveformRef.current) {
+      waveformRef.current.destroy();
+      waveformRef.current = null;
+    }
+
+    // Wait for DOM to be ready
+    const initWavesurfer = () => {
+      const container = document.getElementById('waveform-container');
+      if (!container) {
+        console.log('🎵 Container not ready, retrying...');
+        setTimeout(initWavesurfer, 100);
+        return;
       }
+
+      console.log('🎵 Container found, creating Wavesurfer...');
+
+    // Create Wavesurfer instance with MediaElement backend for streaming
+    const wavesurfer = WaveSurfer.create({
+      container,
+      waveColor: '#6b7280', // Gray color as per instruction
+      progressColor: '#3b82f6', // Blue progress as per instruction
+      height: 128, // Height as per instruction
+      normalize: true,
+      backend: 'MediaElement', // Use MediaElement backend for streaming URLs
+      mediaControls: false // Hide default media controls
+    });
+
+      waveformRef.current = wavesurfer;
+
+      // Event listeners
+      wavesurfer.on('ready', () => {
+        console.log('✅ Real waveform построен с Wavesurfer.js!');
+        console.log('🎵 Waveform container:', container);
+        console.log('🎵 Container dimensions:', {
+          width: container.clientWidth,
+          height: container.clientHeight,
+          offsetWidth: container.offsetWidth,
+          offsetHeight: container.offsetHeight
+        });
+        console.log('🎵 Wavesurfer instance:', wavesurfer);
+        
+        // Force redraw if container has dimensions
+        if (container.clientWidth > 0 && container.clientHeight > 0) {
+          console.log('🎵 Container ready for waveform display');
+        }
+        
+        setIsLoading(false);
+      });
+
+      wavesurfer.on('error', (error) => {
+        console.error('❌ Wavesurfer error:', error);
+        console.error('❌ Error details:', error.message || error);
+        console.error('❌ Audio URL:', audioUrl);
+        console.error('❌ Container element:', container);
+        setIsLoading(false);
+      });
+
+      wavesurfer.on('loading', (percent) => {
+        console.log('🎵 Loading progress:', percent + '%');
+      });
+
+      wavesurfer.on('decode', () => {
+        console.log('🎵 Audio decoded, waveform should be ready...');
+      });
+
+      wavesurfer.on('audioprocess', (time) => {
+        setCurrentTime(time);
+      });
+
+      // Load audio with HLS support
+      console.log('🎵 Loading audio into Wavesurfer...');
+      console.log('🎵 Audio URL:', audioUrl);
       
-      setWaveformData(waveform);
-      setIsLoading(false);
+      // Check if URL is HLS stream
+      if (audioUrl.includes('.m3u8') || audioUrl.includes('m3u8')) {
+        console.log('🎵 Detected HLS stream, using HLS.js...');
+        
+        // Create HLS instance
+        const hls = new Hls({
+          enableWorker: false,
+          lowLatencyMode: true
+        });
+        
+        // Create video element for HLS
+        const video = document.createElement('video');
+        video.style.display = 'none';
+        container.appendChild(video);
+        
+        // Load HLS stream
+        hls.loadSource(audioUrl);
+        hls.attachMedia(video);
+        
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.log('🎵 HLS manifest parsed, loading into Wavesurfer...');
+          // Load the video element directly into Wavesurfer
+          wavesurfer.load(video.src);
+        });
+        
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('❌ HLS error:', data);
+          setIsLoading(false);
+        });
+        
+      } else {
+        // Regular audio URL
+        console.log('🎵 Regular audio URL, loading directly...');
+        console.log('🎵 URL type check:', {
+          isLocalhost: audioUrl.includes('localhost'),
+          isProxy: audioUrl.includes('/stream?url='),
+          hasCors: audioUrl.includes('localhost:3001')
+        });
+        
+        // Test URL accessibility first
+        fetch(audioUrl, { method: 'HEAD' })
+          .then(response => {
+            console.log('🎵 URL accessibility test:', {
+              status: response.status,
+              contentType: response.headers.get('content-type'),
+              cors: response.headers.get('access-control-allow-origin')
+            });
+            
+            // Load into Wavesurfer
+            wavesurfer.load(audioUrl);
+          })
+          .catch(error => {
+            console.error('❌ URL accessibility test failed:', error);
+            // Still try to load - might work despite CORS
+            wavesurfer.load(audioUrl);
+          });
+      }
     };
 
-    // Simulate loading time
-    setTimeout(generateMockWaveform, 500);
-  }, [audioUrl]);
+    // Start initialization
+    initWavesurfer();
+    
+    // Additional check after a delay to ensure container is ready
+    setTimeout(() => {
+      const container = document.getElementById('waveform-container');
+      if (container && waveformRef.current) {
+        console.log('🎵 Delayed container check:', {
+          exists: !!container,
+          dimensions: {
+            width: container.clientWidth,
+            height: container.clientHeight
+          },
+          wavesurferReady: !!waveformRef.current
+        });
+        
+        // Check if waveform is visible
+        if (container.clientWidth > 0) {
+          console.log('🎵 Container is ready, waveform should be visible');
+        }
+      }
+    }, 500);
+
+    // Cleanup
+    return () => {
+      if (waveformRef.current) {
+        waveformRef.current.destroy();
+        waveformRef.current = null;
+      }
+      
+      // Clean up HLS resources
+      const container = document.getElementById('waveform-container');
+      if (container) {
+        const video = container.querySelector('video');
+        if (video) {
+          video.remove();
+        }
+      }
+    };
+  }, [audioUrl, duration]);
 
   // Global mouse up listener to release handles when clicking anywhere
   useEffect(() => {
@@ -164,8 +288,10 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     };
   }, [isDraggingHandle]);
 
-  // Draw waveform
+  // Draw waveform - DISABLED: Wavesurfer handles this automatically
   useEffect(() => {
+    // Wavesurfer.js handles waveform drawing automatically
+    return;
     const canvas = canvasRef.current;
     if (!canvas || waveformData.length === 0) return;
 
@@ -565,17 +691,15 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
               </div>
             </div>
           ) : (
-            <canvas
-              ref={canvasRef}
-              width={2400}
-              height={240}
-              className="w-full h-64 rounded"
-              style={{ backgroundColor: 'rgba(51, 63, 72, 0.1)' }}
-              onClick={handleCanvasClick}
-              onMouseMove={(isDraggingSelection || isDraggingHandle) ? handleCanvasMouseMoveWithDrag : handleCanvasMouseMove}
-              onMouseDown={handleCanvasMouseDown}
-              onMouseUp={handleCanvasMouseUp}
-              onMouseLeave={handleCanvasMouseLeave}
+            <div 
+              id="waveform-container"
+              className="w-full rounded"
+              style={{ 
+                width: '100%', 
+                height: '128px',
+                backgroundColor: 'rgba(51, 63, 72, 0.1)',
+                minHeight: '128px'
+              }}
             />
           )}
           

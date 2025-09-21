@@ -289,8 +289,13 @@ def process_audio():
         print(f"Audio downloaded to: {temp_file}")
         
         # Generate waveform data
+        print(f"Generating waveform data for: {temp_file}")
         waveform_data = processor.generate_waveform_data(temp_file)
+        print(f"Waveform data result: {waveform_data is not None}")
+        
+        print(f"Generating waveform image for: {temp_file}")
         waveform_image = processor.create_waveform_image(temp_file)
+        print(f"Waveform image result: {waveform_image is not None}")
         
         if waveform_data and waveform_image:
             return jsonify({
@@ -301,7 +306,9 @@ def process_audio():
                 'file_path': temp_file
             })
         else:
-            return jsonify({'error': 'Failed to process audio'}), 500
+            error_msg = f'Failed to process audio - waveform_data: {waveform_data is not None}, waveform_image: {waveform_image is not None}'
+            print(f"ERROR: {error_msg}")
+            return jsonify({'error': error_msg}), 500
             
     except Exception as e:
         print(f"Process audio error: {e}")

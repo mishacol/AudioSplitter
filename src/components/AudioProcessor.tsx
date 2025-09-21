@@ -6,6 +6,7 @@ import { Download, Wand2, Scissors, Loader2, ArrowLeft } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import ManualSplitEditor from './ManualSplitEditor';
+import { AudioService } from '@/services';
 
 const AudioProcessor: React.FC = () => {
   const [audioUrl, setAudioUrl] = useState('');
@@ -161,50 +162,8 @@ const AudioProcessor: React.FC = () => {
     }
   };
 
-  const resolveStreamingUrl = async (url: string): Promise<{ url: string | null; duration?: number | null; is_progressive?: boolean | null; title?: string | null; format?: string | null; bitrate?: string | null; fileSize?: string | null; thumbnail?: string | null } | null> => {
-    try {
-      console.log('Fetching metadata from Python backend for:', url);
-      // Use Python backend for metadata extraction
-      const response = await fetch('http://localhost:5000/metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      
-      console.log('Response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('HTTP error:', response.status, errorText);
-        return null;
-      }
-      
-      const data = await response.json();
-      console.log('🔍 Backend metadata response:', data);
-      console.log('🔍 Available keys:', Object.keys(data));
-      
-      if (data.error) {
-        console.error('Backend error:', data.error);
-        return null;
-      }
-      
-      // For YouTube/SoundCloud, use the Node.js streaming server
-      const streamUrl = data?.direct_audio_url ? `http://localhost:3001/stream?url=${encodeURIComponent(data.direct_audio_url)}` : null;
-      
-      return { 
-        url: streamUrl, 
-        duration: data?.duration ?? null, 
-        is_progressive: true, 
-        title: data?.title ?? null,
-        format: data?.format ?? null,
-        bitrate: data?.bitrate ?? null,
-        fileSize: data?.filesize_formatted ?? null,
-        thumbnail: data?.thumbnail ?? null
-      };
-    } catch (error) {
-      console.error('Network error:', error);
-      return null;
-    }
+  const resolveStreamingUrl = async (url: string) => {
+    return AudioService.resolveStreamingUrl(url);
   };
 
   useEffect(() => {
@@ -778,7 +737,7 @@ const AudioProcessor: React.FC = () => {
                     
                     {/* Manual Split Editor */}
                     <ManualSplitEditor
-                      audioUrl={audioUrl}
+                      audioUrl={resolvedAudioUrl || audioUrl}
                       duration={duration}
                       onExport={async (startTime, endTime, format) => {
                         try {
