@@ -496,7 +496,7 @@ const AudioProcessor: React.FC = () => {
           </Card>
 
           {/* Beautiful Preview & Download Section - Shows loading state or after audio is fetched, but hides when split mode is active */}
-          {(isProcessing || audioFetched) && !splitMode && (
+          {(isProcessing || audioFetched) && !splitMode && audioUrl && (
             <div className="bg-gray-800 rounded-2xl p-8 border border-gray-700">
               <h2 className="text-4xl font-bold text-white text-center mb-12">
                 Audio Preview
@@ -672,6 +672,41 @@ const AudioProcessor: React.FC = () => {
                 </div>
               </div>
 
+              {/* Fetch New Track Button */}
+              <div className="flex justify-center mt-6">
+                <button
+                  onClick={() => {
+                    // Stop audio first
+                    if (audioRef.current) {
+                      audioRef.current.pause();
+                      audioRef.current.currentTime = 0;
+                    }
+                    
+                    // Reset all states
+                    setAudioUrl('');
+                    setAudioFetched(false);
+                    setIsProcessing(false);
+                    setAudioLoading(false);
+                    setTrackTitle(null);
+                    setAudioFormat(null);
+                    setAudioBitrate(null);
+                    setFileSize(null);
+                    setTrackImage(null);
+                    setMetadata(null);
+                    setDuration(0);
+                    setCurrentTime(0);
+                    setIsPlaying(false);
+                    setResolvedAudioUrl(null);
+                    setSplitMode(null);
+                    setVolume(1);
+                    setIsResolving(false);
+                    setResolveProgress(0);
+                  }}
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg"
+                >
+                  Fetch New Track
+                </button>
+              </div>
 
             </div>
           )}
