@@ -42,6 +42,40 @@ const AudioProcessor: React.FC = () => {
   const [jobMessage, setJobMessage] = useState<string>('');
   const [lowResPeaks, setLowResPeaks] = useState<any>(null);
   const [showProgressBar, setShowProgressBar] = useState(true);
+  const [animatedProgress, setAnimatedProgress] = useState(0);
+
+  // Animate progress smoothly with realistic increments
+  useEffect(() => {
+    const targetProgress = jobProgress;
+    const startProgress = animatedProgress;
+    
+    // If target is higher, animate up with realistic increments
+    if (targetProgress > startProgress) {
+      const duration = 2000; // 2 seconds for smooth animation
+      const startTime = Date.now();
+      const increment = 0.5; // Update every 0.5%
+      
+      const animate = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Easing function for smooth animation
+        const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+        const currentProgress = startProgress + (targetProgress - startProgress) * easeOutCubic;
+        
+        setAnimatedProgress(currentProgress);
+        
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+
+      requestAnimationFrame(animate);
+    } else {
+      // If target is lower or same, set immediately
+      setAnimatedProgress(targetProgress);
+    }
+  }, [jobProgress]);
 
   // Function to stop playback and reset audio state
   const stopPlayback = () => {
@@ -947,6 +981,7 @@ const AudioProcessor: React.FC = () => {
                       setSplitMode('manual');
                       // Start progressive processing for Manual Split
                       if (resolvedAudioUrl || audioUrl) {
+                        setAnimatedProgress(0); // Reset animation
                         startProgressiveProcessing(resolvedAudioUrl || audioUrl);
                       }
                     }}
@@ -991,17 +1026,17 @@ const AudioProcessor: React.FC = () => {
                               {currentJobId ? 'Processing Audio' : 'Preparing...'}
                             </span>
                             <span className="text-blue-400 font-bold">
-                              {currentJobId ? Math.round(jobProgress) : 0}%
+                              {Math.round(animatedProgress)}%
                             </span>
                           </div>
                           <div className="w-full bg-gray-700 rounded-full h-2">
                             <div 
                               className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${currentJobId ? jobProgress : 0}%` }}
+                              style={{ width: `${animatedProgress}%` }}
                             />
                           </div>
                           <p className="text-gray-300 text-sm mt-2">
-                            {currentJobId ? jobMessage : 'Initializing waveform processing...'}
+                            {currentJobId ? jobMessage.replace('progressive', '').trim() : 'Initializing waveform processing...'}
                           </p>
                         </div>
                       )}

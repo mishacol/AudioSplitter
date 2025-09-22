@@ -7,18 +7,71 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Audio processing files
+python_backend/downloads/
+python_backend/*.mp3
+python_backend/*.wav
+python_backend/*.m4a
+python_backend/*.webm
+python_backend/temp_*
+python_backend/cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+
+# Node.js
 node_modules
 dist
 dist-ssr
 *.local
 
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+*~
+
+# Build outputs
+build/
+out/
+*.tgz
+*.tar.gz
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
