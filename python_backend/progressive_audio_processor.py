@@ -7,6 +7,7 @@ import uuid
 import json
 import threading
 import time
+import shutil
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -22,6 +23,64 @@ CORS(app, origins=['http://localhost:8080', 'http://localhost:8081', 'http://loc
 # In-memory storage
 job_status = {}
 multi_res_peaks_cache = {}  # Cache for multi-resolution peaks
+
+# Downloads folder management
+DOWNLOADS_FOLDER = 'downloads'
+MAX_DOWNLOADS_SIZE = 1 * 1024 * 1024 * 1024  # 1GB in bytes
+
+def get_folder_size(folder_path: str) -> int:
+    """Get total size of folder in bytes"""
+    total_size = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(folder_path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                if os.path.exists(filepath):
+                    total_size += os.path.getsize(filepath)
+    except Exception as e:
+        print(f"Error calculating folder size: {e}")
+    return total_size
+
+def cleanup_old_files():
+    """Remove oldest files when downloads folder exceeds 1GB limit"""
+    if not os.path.exists(DOWNLOADS_FOLDER):
+        return
+    
+    current_size = get_folder_size(DOWNLOADS_FOLDER)
+    print(f"Downloads folder size: {current_size / (1024*1024):.1f}MB")
+    
+    if current_size <= MAX_DOWNLOADS_SIZE:
+        return
+    
+    print(f"Downloads folder exceeds 1GB limit, cleaning up...")
+    
+    # Get all files with their modification times
+    files_with_time = []
+    for filename in os.listdir(DOWNLOADS_FOLDER):
+        filepath = os.path.join(DOWNLOADS_FOLDER, filename)
+        if os.path.isfile(filepath):
+            mtime = os.path.getmtime(filepath)
+            size = os.path.getsize(filepath)
+            files_with_time.append((filepath, mtime, size))
+    
+    # Sort by modification time (oldest first)
+    files_with_time.sort(key=lambda x: x[1])
+    
+    # Remove oldest files until under limit
+    removed_size = 0
+    for filepath, mtime, size in files_with_time:
+        if current_size - removed_size <= MAX_DOWNLOADS_SIZE:
+            break
+        
+        try:
+            os.remove(filepath)
+            removed_size += size
+            print(f"Removed old file: {os.path.basename(filepath)} ({size / (1024*1024):.1f}MB)")
+        except Exception as e:
+            print(f"Error removing file {filepath}: {e}")
+    
+    new_size = get_folder_size(DOWNLOADS_FOLDER)
+    print(f"Cleanup complete. New size: {new_size / (1024*1024):.1f}MB")
 
 def update_job_status(job_id: str, status: str, progress: int, message: str, data: Dict = None):
     """Update job status in memory"""
@@ -210,6 +269,9 @@ def background_progressive_processing(job_id: str, audio_url: str):
         update_job_status(job_id, 'processing', 30, 'Preparing high-res processing...')
         
         try:
+            # Clean up old files before downloading
+            cleanup_old_files()
+            
             # Use yt-dlp for full download with timeout
             import yt_dlp
             import signal
