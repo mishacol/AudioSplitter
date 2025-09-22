@@ -20,9 +20,85 @@ from flask_cors import CORS
 import tempfile
 import uuid
 import yt_dlp
+import threading
+import time
+from datetime import datetime
+import requests
 
 app = Flask(__name__)
 CORS(app)
+
+# Global job tracking
+job_status = {}
+job_lock = threading.Lock()
+
+def update_job_status(job_id, status, progress=0, message="", data=None):
+    """Update job status thread-safely"""
+    with job_lock:
+        job_status[job_id] = {
+            'status': status,  # 'queued', 'processing', 'completed', 'error'
+            'progress': progress,  # 0-100
+            'message': message,
+            'data': data,
+            'timestamp': datetime.now().isoformat()
+        }
+
+def background_process_audio(job_id, audio_url):
+    """Background audio processing function - optimized for large files"""
+    try:
+        update_job_status(job_id, 'processing', 5, 'Analyzing file size...')
+        
+        processor = AudioProcessor()
+        
+        # Get file info first (fast)
+        file_info = processor.get_file_info(audio_url)
+        file_size_mb = file_info.get('file_size_mb', 0)
+        
+        update_job_status(job_id, 'processing', 10, f'File size: {file_size_mb:.1f} MB')
+        
+        # For large files (>50MB), generate placeholder peaks immediately
+        if file_size_mb > 50:
+            update_job_status(job_id, 'processing', 20, 'Large file detected - generating placeholder...')
+            
+            # Generate placeholder peaks (no download)
+            placeholder_peaks = processor.generate_placeholder_peaks(file_info.get('duration', 0), points=1024)
+            
+            update_job_status(job_id, 'completed', 100, 'Placeholder ready - download on demand', {
+                'file_path': None,  # No file downloaded yet
+                'duration': file_info.get('duration', 0),
+                'low_res_peaks': placeholder_peaks,
+                'file_size_mb': file_size_mb,
+                'download_on_demand': True
+            })
+            return
+        
+        # For smaller files, proceed with normal processing
+        update_job_status(job_id, 'processing', 15, 'Generating quick waveform...')
+        low_res_peaks = processor.generate_quick_peaks_from_stream(audio_url, points=1024)
+        
+        if low_res_peaks:
+            update_job_status(job_id, 'processing', 25, 'Quick waveform ready!', {
+                'low_res_peaks': low_res_peaks
+            })
+        
+        # Continue with full download
+        update_job_status(job_id, 'processing', 30, 'Downloading audio...')
+        filename, duration = processor.download_audio(audio_url)
+        if not filename:
+            raise Exception("Failed to download audio")
+        
+        update_job_status(job_id, 'processing', 70, 'Generating full waveform...')
+        waveform_data = processor.generate_waveform_data(filename)
+        
+        update_job_status(job_id, 'completed', 100, 'Processing complete', {
+            'file_path': filename,
+            'duration': duration,
+            'low_res_peaks': low_res_peaks,
+            'waveform_data': waveform_data
+        })
+        
+    except Exception as e:
+        update_job_status(job_id, 'error', 0, f'Error: {str(e)}')
 
 class AudioProcessor:
     def __init__(self):
@@ -80,6 +156,190 @@ class AudioProcessor:
             }
         except Exception as e:
             print(f"Error generating waveform data: {e}")
+            return None
+
+    def generate_low_res_peaks(self, audio_url, points=1024):
+        """Generate low-resolution peaks quickly for immediate waveform display"""
+        try:
+            # Download just enough to get basic info
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': os.path.join(self.temp_dir, 'temp_%(id)s.%(ext)s'),
+                'extractaudio': True,
+                'audioformat': 'mp3',
+                'noplaylist': True,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(audio_url, download=True)
+                filename = ydl.prepare_filename(info)
+                
+                # Convert to mp3 if needed
+                if not filename.endswith('.mp3'):
+                    audio = AudioSegment.from_file(filename)
+                    mp3_filename = filename.rsplit('.', 1)[0] + '.mp3'
+                    audio.export(mp3_filename, format='mp3')
+                    os.remove(filename)
+                    filename = mp3_filename
+            
+            # Load audio with low sample rate for speed
+            y, sr = librosa.load(filename, sr=8000)  # Low sample rate for speed
+            duration = len(y) / sr
+            
+            # Generate simple peaks array
+            chunk_size = len(y) // points
+            peaks = []
+            
+            for i in range(points):
+                start_idx = i * chunk_size
+                end_idx = min((i + 1) * chunk_size, len(y))
+                chunk = y[start_idx:end_idx]
+                
+                if len(chunk) > 0:
+                    max_val = float(np.max(chunk))
+                    min_val = float(np.min(chunk))
+                    peaks.append([min_val, max_val])
+                else:
+                    peaks.append([0, 0])
+            
+            # Clean up temp file
+            if os.path.exists(filename):
+                os.remove(filename)
+            
+            return {
+                'peaks': peaks,
+                'duration': duration,
+                'sample_rate': sr,
+                'points': points
+            }
+            
+        except Exception as e:
+            print(f"Low-res peaks generation error: {e}")
+            return None
+
+    def generate_quick_peaks_from_stream(self, audio_url, points=1024, max_bytes=10*1024*1024):
+        """Generate peaks from first few MB of stream for immediate display"""
+        try:
+            import requests
+            
+            # Stream only first few MB
+            headers = {'Range': f'bytes=0-{max_bytes}'}
+            response = requests.get(audio_url, headers=headers, stream=True, timeout=10)
+            
+            if response.status_code not in [200, 206]:  # 206 = Partial Content
+                print(f"Stream request failed: {response.status_code}")
+                return None
+            
+            # Save first chunk to temp file
+            temp_file = os.path.join(self.temp_dir, f'quick_{uuid.uuid4()}.mp3')
+            
+            with open(temp_file, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    if f.tell() >= max_bytes:
+                        break
+            
+            # Load audio with very low sample rate for speed
+            y, sr = librosa.load(temp_file, sr=4000)  # Very low sample rate
+            duration = len(y) / sr
+            
+            # Generate simple peaks array
+            chunk_size = max(1, len(y) // points)
+            peaks = []
+            
+            for i in range(points):
+                start_idx = i * chunk_size
+                end_idx = min((i + 1) * chunk_size, len(y))
+                chunk = y[start_idx:end_idx]
+                
+                if len(chunk) > 0:
+                    max_val = float(np.max(chunk))
+                    min_val = float(np.min(chunk))
+                    peaks.append([min_val, max_val])
+                else:
+                    peaks.append([0, 0])
+            
+            # Clean up temp file
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+            
+            return {
+                'peaks': peaks,
+                'duration': duration,
+                'sample_rate': sr,
+                'points': points,
+                'source': 'stream_preview'
+            }
+            
+        except Exception as e:
+            print(f"Quick peaks generation error: {e}")
+            return None
+
+    def get_file_info(self, audio_url):
+        """Get file info without downloading"""
+        try:
+            import requests
+            
+            # Get HEAD request to get file size
+            response = requests.head(audio_url, timeout=10)
+            content_length = response.headers.get('content-length')
+            
+            file_size_mb = 0
+            if content_length:
+                file_size_mb = int(content_length) / (1024 * 1024)
+            
+            # Try to get duration from metadata
+            duration = 0
+            try:
+                ydl_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': False,
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(audio_url, download=False)
+                    duration = info.get('duration', 0)
+            except:
+                pass
+            
+            return {
+                'file_size_mb': file_size_mb,
+                'duration': duration,
+                'content_type': response.headers.get('content-type', '')
+            }
+            
+        except Exception as e:
+            print(f"File info error: {e}")
+            return {'file_size_mb': 0, 'duration': 0}
+
+    def generate_placeholder_peaks(self, duration, points=1024):
+        """Generate placeholder peaks for large files (no download)"""
+        try:
+            # Generate random-ish peaks that look like audio
+            import random
+            peaks = []
+            
+            for i in range(points):
+                # Create some variation to look like real audio
+                base_amplitude = 0.3 + 0.4 * random.random()
+                variation = 0.1 * random.random()
+                
+                min_val = -base_amplitude - variation
+                max_val = base_amplitude + variation
+                
+                peaks.append([min_val, max_val])
+            
+            return {
+                'peaks': peaks,
+                'duration': duration,
+                'sample_rate': 44100,
+                'points': points,
+                'source': 'placeholder',
+                'note': 'Placeholder waveform for large file'
+            }
+            
+        except Exception as e:
+            print(f"Placeholder peaks error: {e}")
             return None
     
     def create_waveform_image(self, audio_file_path, split_points=None):
@@ -189,6 +449,74 @@ processor = AudioProcessor()
 @app.route('/')
 def home():
     return jsonify({'message': 'Python Audio Processor API'})
+
+@app.route('/preload', methods=['POST'])
+def preload_audio():
+    """Non-blocking audio preload - returns job_id immediately"""
+    try:
+        data = request.get_json()
+        audio_url = data.get('audio_url')
+        
+        if not audio_url:
+            return jsonify({'error': 'No audio URL provided'}), 400
+        
+        # Generate unique job ID
+        job_id = str(uuid.uuid4())
+        
+        # Initialize job status
+        update_job_status(job_id, 'queued', 0, 'Job queued')
+        
+        # Start background processing
+        thread = threading.Thread(target=background_process_audio, args=(job_id, audio_url))
+        thread.daemon = True
+        thread.start()
+        
+        # Return job_id immediately
+        return jsonify({
+            'job_id': job_id,
+            'status': 'queued',
+            'message': 'Processing started in background'
+        }), 202
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/progress/<job_id>', methods=['GET'])
+def get_progress(job_id):
+    """Get job progress"""
+    try:
+        with job_lock:
+            if job_id not in job_status:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            status = job_status[job_id]
+            return jsonify(status)
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/peaks/<job_id>', methods=['GET'])
+def get_peaks(job_id):
+    """Get low-res peaks data for a job"""
+    try:
+        with job_lock:
+            if job_id not in job_status:
+                return jsonify({'error': 'Job not found'}), 404
+            
+            status = job_status[job_id]
+            if status['status'] != 'completed':
+                return jsonify({'error': 'Job not completed yet'}), 202
+            
+            data = status.get('data', {})
+            low_res_peaks = data.get('low_res_peaks')
+            
+            if low_res_peaks:
+                return jsonify(low_res_peaks)
+            else:
+                return jsonify({'error': 'No peaks data available'}), 404
+                
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/metadata', methods=['POST'])
 def extract_metadata():

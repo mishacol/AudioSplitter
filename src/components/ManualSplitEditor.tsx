@@ -7,12 +7,14 @@ import Waveform from './Waveform';
 interface ManualSplitEditorProps {
   audioUrl: string;
   duration: number;
+  lowResPeaks?: any;
   onExport: (startTime: number, endTime: number, format: string) => void;
 }
 
 const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   audioUrl,
   duration,
+  lowResPeaks,
   onExport,
 }) => {
   const [selectionStart, setSelectionStart] = useState(0);
@@ -35,8 +37,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     <div className="w-full space-y-6">
       {/* Waveform with Peaks.js */}
       <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-white text-lg font-semibold mb-4">Interactive Waveform</h3>
-        <Waveform audioUrl={audioUrl} />
+        <Waveform audioUrl={audioUrl} lowResPeaks={lowResPeaks} />
       </div>
 
       {/* Selection Controls */}

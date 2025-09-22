@@ -7,6 +7,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { toast } from '@/components/ui/use-toast';
 import ManualSplitEditor from './ManualSplitEditor';
 import { AudioService } from '@/services';
+import { progressiveAudioService, ProgressiveEvent } from '@/services/progressiveAudioService';
+import ProgressiveWaveform from './ProgressiveWaveform';
+import Waveform from './Waveform';
 
 const AudioProcessor: React.FC = () => {
   const [audioUrl, setAudioUrl] = useState('');
@@ -31,6 +34,14 @@ const AudioProcessor: React.FC = () => {
   const [fileSize, setFileSize] = useState<string | null>(null);
   const [trackImage, setTrackImage] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<any>(null);
+  
+  // Job tracking for non-blocking processing
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState(0);
+  const [jobStatus, setJobStatus] = useState<string>('');
+  const [jobMessage, setJobMessage] = useState<string>('');
+  const [lowResPeaks, setLowResPeaks] = useState<any>(null);
+  const [showProgressBar, setShowProgressBar] = useState(true);
 
   // Function to stop playback and reset audio state
   const stopPlayback = () => {
@@ -40,6 +51,152 @@ const AudioProcessor: React.FC = () => {
     }
     setIsPlaying(false);
     setCurrentTime(0);
+  };
+
+  // Start progressive audio processing
+  const startProgressiveProcessing = async (url: string) => {
+    try {
+      // Start progressive processing
+      const job = await progressiveAudioService.startProgressiveProcessing(url);
+      setCurrentJobId(job.job_id);
+      setJobStatus(job.status);
+      setJobProgress(0);
+      setJobMessage('Starting progressive processing...');
+
+      // Subscribe to progressive updates
+      const unsubscribe = subscribeToProgressive(job.job_id);
+      
+      // Show player immediately with HLS audio
+      setAudioFetched(true);
+      setIsProcessing(false);
+      
+      return unsubscribe;
+    } catch (error) {
+      console.error('Failed to start progressive processing:', error);
+      setJobStatus('error');
+      setJobMessage(`Error: ${error}`);
+      toast({ 
+        title: 'Processing Error', 
+        description: 'Failed to start audio processing. Please try again.', 
+        variant: 'destructive' as any 
+      });
+      return null;
+    }
+  };
+
+  // Subscribe to progressive updates - simplified, let ProgressiveWaveform handle the details
+  const subscribeToProgressive = (jobId: string) => {
+    const unsubscribe = progressiveAudioService.subscribeToProgressive(
+      jobId,
+      (event: ProgressiveEvent) => {
+        console.log('📊 Progressive event:', event);
+        
+        setJobStatus('processing');
+        setJobProgress(event.progress);
+        setJobMessage(event.message);
+      },
+      undefined, // Let ProgressiveWaveform handle low-res peaks
+      undefined, // Let ProgressiveWaveform handle multi-res peaks
+      (error) => {
+        console.error('Progressive loading error:', error);
+        setJobStatus('error');
+        setJobMessage('Connection error');
+      },
+      () => {
+        console.log('✅ Progressive processing complete');
+        setJobStatus('completed');
+        setJobProgress(100);
+        setJobMessage('Processing complete!');
+        console.log('🔧 Setting jobStatus to completed - spinner should hide');
+      }
+    );
+
+    return unsubscribe;
+  };
+
+  // Poll job progress
+  const pollJobProgress = async (jobId: string) => {
+    try {
+      const response = await fetch(`http://localhost:5000/progress/${jobId}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const progress = await response.json();
+      setJobProgress(progress.progress);
+      setJobStatus(progress.status);
+      setJobMessage(progress.message);
+      
+      // Check if peaks data is available in progress data
+      if (progress.data && progress.data.low_res_peaks) {
+        setLowResPeaks(progress.data.low_res_peaks);
+        console.log('Low-res peaks loaded from progress:', progress.data.low_res_peaks);
+      }
+      
+      // If job is completed, get final peaks data
+      if (progress.status === 'completed') {
+        try {
+          const peaksResponse = await fetch(`http://localhost:5000/peaks/${jobId}`);
+          if (peaksResponse.ok) {
+            const peaksData = await peaksResponse.json();
+            setLowResPeaks(peaksData);
+            console.log('Final peaks loaded:', peaksData);
+          }
+        } catch (error) {
+          console.error('Failed to load peaks data:', error);
+        }
+        
+        // Stop polling
+        return;
+      }
+      
+      // If job is still processing, continue polling
+      if (progress.status === 'processing' || progress.status === 'queued') {
+        setTimeout(() => pollJobProgress(jobId), 1000); // Poll every second
+      }
+      
+    } catch (error) {
+      console.error('Failed to get job progress:', error);
+      setJobStatus('error');
+      setJobMessage('Failed to get progress');
+    }
+  };
+
+  // Start non-blocking audio processing
+  const startNonBlockingProcessing = async (url: string) => {
+    try {
+      const response = await fetch('http://localhost:5000/preload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ audio_url: url }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      setCurrentJobId(result.job_id);
+      setJobStatus(result.status);
+      setJobMessage(result.message);
+      
+      // Start polling for progress
+      pollJobProgress(result.job_id);
+      
+      // Show player immediately with HLS audio
+      setAudioFetched(true);
+      setIsProcessing(false);
+      
+    } catch (error) {
+      console.error('Failed to start processing:', error);
+      toast({ 
+        title: 'Processing Error', 
+        description: 'Failed to start audio processing. Please try again.', 
+        variant: 'destructive' as any 
+      });
+    }
   };
 
   // Resolve audio URL immediately when audioUrl changes (like Manual Split)
@@ -91,6 +248,9 @@ const AudioProcessor: React.FC = () => {
             if (resolved.duration) {
               setDuration(resolved.duration);
             }
+            
+            // Don't start progressive processing automatically - only when Manual Split is clicked
+            // startProgressiveProcessing(resolved.url);
             if (resolved.title) {
               setTrackTitle(resolved.title);
             }
@@ -471,6 +631,52 @@ const AudioProcessor: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Job Processing Progress - HIDDEN in Audio Preview */}
+              {false && currentJobId && jobStatus && (
+                <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {jobStatus === 'processing' ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500"></div>
+                      ) : jobStatus === 'completed' ? (
+                        <div className="rounded-full h-4 w-4 bg-green-500"></div>
+                      ) : jobStatus === 'error' ? (
+                        <div className="rounded-full h-4 w-4 bg-red-500"></div>
+                      ) : (
+                        <div className="animate-pulse rounded-full h-4 w-4 bg-yellow-500"></div>
+                      )}
+                      <span className="text-sm text-gray-300">
+                        {jobStatus === 'processing' ? 'Processing audio...' : 
+                         jobStatus === 'completed' ? 'Processing complete!' :
+                         jobStatus === 'error' ? 'Processing failed' :
+                         'Queued for processing'}
+                      </span>
+                    </div>
+                    <span className="text-sm text-gray-400">{Math.round(jobProgress)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div 
+                      className={`h-2 rounded-full transition-all duration-300 ease-out ${
+                        jobStatus === 'completed' ? 'bg-green-500' :
+                        jobStatus === 'error' ? 'bg-red-500' :
+                        'bg-gradient-to-r from-green-500 to-blue-600'
+                      }`}
+                      style={{ width: `${jobProgress}%` }}
+                    ></div>
+                  </div>
+                  {jobMessage && (
+                    <div className="mt-2 text-xs text-gray-400">
+                      {jobMessage}
+                    </div>
+                  )}
+                  {lowResPeaks && (
+                    <div className="mt-2 text-xs text-green-400">
+                      ✓ Low-res waveform ready ({lowResPeaks.points} points)
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Hidden audio element for real playback */}
               <audio 
                 ref={audioRef} 
@@ -739,6 +945,10 @@ const AudioProcessor: React.FC = () => {
                     onClick={() => {
                       stopPlayback();
                       setSplitMode('manual');
+                      // Start progressive processing for Manual Split
+                      if (resolvedAudioUrl || audioUrl) {
+                        startProgressiveProcessing(resolvedAudioUrl || audioUrl);
+                      }
                     }}
                     className={`flex items-center gap-2 ${
                       splitMode === 'manual' 
@@ -763,68 +973,68 @@ const AudioProcessor: React.FC = () => {
 
                 {/* Manual Split Controls */}
                 {splitMode === 'manual' && (
-                  <div className="space-y-4">
+                  <div className="relative space-y-4">
                     <div className="text-center">
                       <p className="text-gray-300 text-sm mb-4">
                         Use yellow frame to create regions and import your selections
                       </p>
                     </div>
                     
-                    {/* Manual Split Editor */}
-                    <ManualSplitEditor
-                      audioUrl={resolvedAudioUrl || audioUrl}
-                      duration={duration}
-                      onExport={async (startTime, endTime, format) => {
-                        try {
-                          // Generate filename
-                          const startTimeStr = formatTime(startTime).replace(/:/g, '-');
-                          const endTimeStr = formatTime(endTime).replace(/:/g, '-');
-                          const filename = `audio_selection_${startTimeStr}_to_${endTimeStr}.${format}`;
-                          
-                          // Call backend to create audio segment in selected format (streaming approach)
-                          const response = await fetch('http://localhost:3001/split', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                              url: audioUrl,
-                              format: format,
-                              startTime: startTime,
-                              endTime: endTime
-                            }),
-                          });
-                          
-                          if (!response.ok) {
-                            throw new Error('Failed to create audio segment');
-                          }
-                          
-                          // Get the audio blob
-                          const audioBlob = await response.blob();
-                          
-                          // Create file save dialog
-                          const link = document.createElement('a');
-                          link.href = URL.createObjectURL(audioBlob);
-                          link.download = filename;
-                          link.style.display = 'none';
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          
-                          // Clean up the blob URL
-                          URL.revokeObjectURL(link.href);
-                          
-                          toast({ 
-                            title: '💾 File Saved!', 
-                            description: `Audio segment saved as ${filename}`,
-                            className: 'bg-blue-900 border-blue-700 text-blue-100'
-                          });
-                        } catch (error) {
-                          console.error('Error saving file:', error);
-                          setShowErrorPopup(true);
-                        }
-                      }}
-                    />
+                    
+                    {/* Manual Split Waveform Editor */}
+                    <div className="relative">
+                      {/* Progress indication for Manual Split - hide when waveform is ready */}
+                      {splitMode === 'manual' && showProgressBar && (
+                        <div className="mb-4 p-4 bg-gray-800 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-white font-medium">
+                              {currentJobId ? 'Processing Audio' : 'Preparing...'}
+                            </span>
+                            <span className="text-blue-400 font-bold">
+                              {currentJobId ? Math.round(jobProgress) : 0}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${currentJobId ? jobProgress : 0}%` }}
+                            />
+                          </div>
+                          <p className="text-gray-300 text-sm mt-2">
+                            {currentJobId ? jobMessage : 'Initializing waveform processing...'}
+                          </p>
+                        </div>
+                      )}
+                      
+                      <Waveform
+                        audioUrl={resolvedAudioUrl || audioUrl}
+                        lowResPeaks={lowResPeaks}
+                        useCustomPlayer={true}
+                        audioRef={audioRef}
+                        duration={duration}
+                        onWaveformReady={() => {
+                          console.log('🎯 Waveform is ready - hiding progress bar');
+                          setShowProgressBar(false);
+                        }}
+                      />
+                      
+                      {/* Export controls */}
+                      <div className="mt-6 bg-gray-800 rounded-lg p-4">
+                        <h3 className="text-white text-lg font-semibold mb-4">Export Selection</h3>
+                        <div className="flex gap-4">
+                          <Button
+                            onClick={async () => {
+                              // Export logic here
+                              console.log('Export clicked');
+                            }}
+                            className="bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700"
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Export Selection
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
