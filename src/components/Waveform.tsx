@@ -128,13 +128,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
       },
       // Enable regions at top level
       regions: true,
-      // Waveform colors
-      overviewWaveformColor: "#999",
-      zoomWaveformColor: "#222", 
+      // Playhead-related colors
       playheadColor: "#fff",
       cursorColor: "#fff",
-      pointMarkerColor: "#fff",
-      segmentColor: "rgba(255,255,0,0.5)"
+      pointMarkerColor: "#fff"
     };
 
     Peaks.init(options, (err, peaks) => {

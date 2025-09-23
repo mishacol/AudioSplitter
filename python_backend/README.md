@@ -27,16 +27,14 @@ pip install -r requirements.txt
 ## Running the Backend
 
 ```bash
-python audio_processor.py
+python progressive_audio_processor.py
 ```
 
-The API will be available at `http://localhost:5000`
+The API will be available at `http://localhost:5002`
 
 ## API Endpoints
 
-- `POST /process-audio`: Generate waveform data and visualization
-- `POST /split-audio`: Split audio at specified points
-- `GET /download-segment/<filename>`: Download split segments
+See `progressive_audio_processor.py` for current endpoints (SSE progress, downloads, peaks).
 
 ## Advantages over JavaScript Approach
 

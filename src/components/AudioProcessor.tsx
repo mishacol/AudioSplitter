@@ -8,7 +8,6 @@ import { toast } from '@/components/ui/use-toast';
 import ManualSplitEditor from './ManualSplitEditor';
 import { AudioService } from '@/services';
 import { progressiveAudioService, ProgressiveEvent } from '@/services/progressiveAudioService';
-import ProgressiveWaveform from './ProgressiveWaveform';
 import Waveform from './Waveform';
 
 const AudioProcessor: React.FC = () => {
@@ -119,7 +118,7 @@ const AudioProcessor: React.FC = () => {
     }
   };
 
-  // Subscribe to progressive updates - simplified, let ProgressiveWaveform handle the details
+  // Subscribe to progressive updates
   const subscribeToProgressive = (jobId: string) => {
     const unsubscribe = progressiveAudioService.subscribeToProgressive(
       jobId,
@@ -130,8 +129,8 @@ const AudioProcessor: React.FC = () => {
         setJobProgress(event.progress);
         setJobMessage(event.message);
       },
-      undefined, // Let ProgressiveWaveform handle low-res peaks
-      undefined, // Let ProgressiveWaveform handle multi-res peaks
+      undefined,
+      undefined,
       (audioInfo) => {
         console.log('🎵 Downloaded audio ready:', audioInfo);
         console.log('🔄 Switching from streaming to downloaded file for better performance');
