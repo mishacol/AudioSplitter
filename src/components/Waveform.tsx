@@ -117,11 +117,34 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
     console.log('Initializing Peaks.js...');
     console.log('Audio element:', audioRef.current);
     console.log('Overview container:', overviewContainerRef.current);
+    console.log('Audio duration:', audioRef.current?.duration);
+    console.log('Audio readyState:', audioRef.current?.readyState);
+    console.log('Container dimensions:', {
+      width: overviewContainerRef.current?.offsetWidth,
+      height: overviewContainerRef.current?.offsetHeight
+    });
 
-    const options = {
+    // Ensure container has proper dimensions
+    if (overviewContainerRef.current) {
+      overviewContainerRef.current.style.width = '100%';
+      overviewContainerRef.current.style.height = '200px';
+      overviewContainerRef.current.style.minHeight = '200px';
+    }
+
+    // Wait for audio to be ready
+    const initPeaks = () => {
+      if (!audioRef.current || audioRef.current.readyState < 2) {
+        console.log('Audio not ready yet, waiting...');
+        setTimeout(initPeaks, 100);
+        return;
+      }
+
+      console.log('Audio is ready, initializing Peaks.js...');
+      const options = {
       overview: {
         container: overviewContainerRef.current!,
         waveformColor: 'rgba(194, 173, 172, 0.21)',
+        playedWaveformColor: '#3b82f6',
         axisGridlineColor: 'white',
         axisLabelColor: 'white'
       },
@@ -194,6 +217,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
         console.log('Cursor moved to', time);
       });
     });
+    };
+
+    // Start the initialization process
+    initPeaks();
 
     return () => {
       // cleanup при размонтировании
