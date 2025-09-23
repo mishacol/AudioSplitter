@@ -120,7 +120,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
 
     const options = {
       overview: {
-        container: overviewContainerRef.current!
+        container: overviewContainerRef.current!,
+        waveformColor: 'rgba(194, 173, 172, 0.21)',
+        axisGridlineColor: 'white',
+        axisLabelColor: 'white'
       },
       mediaElement: audioRef.current!,
       webAudio: {
@@ -129,9 +132,9 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
       // Enable regions at top level
       regions: true,
       // Playhead-related colors
-      playheadColor: "#fff",
+      playheadColor: '#fff',
       cursorColor: "#fff",
-      pointMarkerColor: "#fff"
+      pointMarkerColor: 'rgba(234, 41, 31, 0.21)'
     };
 
     Peaks.init(options, (err, peaks) => {
@@ -285,24 +288,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
         .peaks-region-label {
           color: yellow !important;
           background-color: rgba(0, 0, 0, 0.8) !important;
-        }
-        .peaks-overview-container svg * {
-          stroke: white !important;
-        }
-        .peaks-overview-container svg line {
-          stroke: white !important;
-        }
-        .peaks-overview-container svg path {
-          stroke: white !important;
-        }
-        .peaks-overview-container svg rect {
-          stroke: white !important;
-        }
-        .peaks-overview-container svg circle {
-          stroke: white !important;
-        }
-        .peaks-overview-container svg polygon {
-          stroke: white !important;
         }
       `}</style>
       
