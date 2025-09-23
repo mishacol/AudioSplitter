@@ -14,7 +14,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
   const internalAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioRef = externalAudioRef || internalAudioRef;
   const overviewContainerRef = useRef<HTMLDivElement | null>(null);
-  const zoomviewContainerRef = useRef<HTMLDivElement | null>(null);
   const [isPeaksReady, setIsPeaksReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -101,7 +100,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
 
   // Проверяем готовность DOM элементов
   useEffect(() => {
-    if (audioRef.current && overviewContainerRef.current && zoomviewContainerRef.current) {
+    if (audioRef.current && overviewContainerRef.current) {
       setIsPeaksReady(true);
     } else {
       setIsPeaksReady(false);
@@ -118,12 +117,8 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
     console.log('Initializing Peaks.js...');
     console.log('Audio element:', audioRef.current);
     console.log('Overview container:', overviewContainerRef.current);
-    console.log('Zoomview container:', zoomviewContainerRef.current);
 
     const options = {
-      zoomview: {
-        container: zoomviewContainerRef.current!
-      },
       overview: {
         container: overviewContainerRef.current!
       },
@@ -131,6 +126,15 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
       webAudio: {
         audioContext: new (window.AudioContext || (window as any).webkitAudioContext)(),
       },
+      // Enable regions at top level
+      regions: true,
+      // Waveform colors
+      overviewWaveformColor: "#999",
+      zoomWaveformColor: "#222", 
+      playheadColor: "#fff",
+      cursorColor: "#fff",
+      pointMarkerColor: "#fff",
+      segmentColor: "rgba(255,255,0,0.5)"
     };
 
     Peaks.init(options, (err, peaks) => {
@@ -140,14 +144,52 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
       }
 
       console.log('Peaks.js initialized successfully!');
+      console.log('Peaks instance:', peaks);
+      console.log('Available methods:', Object.keys(peaks));
+      console.log('Regions object:', (peaks as any).regions);
       
       // Notify parent that waveform is ready
       onWaveformReady?.();
       
-      // Добавляем кастомный курсор (пример)
+      // Enable seeking on overview
       peaks.views.getView('overview').enableSeek(true);
 
-      // Можно подписаться на события (например, перемещение курсора)
+      // Enable region creation by dragging
+      (peaks.views.getView('overview') as any).enableRegionCreation(true);
+      
+      // Wait a bit for the waveform to load, then add test region
+      setTimeout(() => {
+        try {
+          // Try to add a test region to see if regions work at all
+          (peaks as any).regions.add({
+            startTime: 10,
+            endTime: 20,
+            color: 'yellow',
+            labelText: 'Test Region'
+          });
+          
+          console.log('Test region added successfully');
+        } catch (error) {
+          console.error('Failed to add test region:', error);
+        }
+      }, 1000);
+      
+      console.log('Peaks regions enabled, will add test region in 1 second');
+
+      // Listen for region events
+      (peaks as any).on('regions.add', (region: any) => {
+        console.log('Region added:', region);
+      });
+
+      (peaks as any).on('regions.remove', (region: any) => {
+        console.log('Region removed:', region);
+      });
+
+      (peaks as any).on('regions.update', (region: any) => {
+        console.log('Region updated:', region);
+      });
+
+      // Listen for player events
       peaks.on('player.seeked', (time: number) => {
         console.log('Cursor moved to', time);
       });
@@ -199,15 +241,24 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
-    if (!audio || !duration) return;
+    if (!audio || !displayDuration) return;
     
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
-    const percentage = clickX / rect.width;
-    const newTime = percentage * duration;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width)); // Clamp between 0 and 1
+    const newTime = percentage * displayDuration;
     
+    // Store current playing state
+    const wasPlaying = !audio.paused;
+    
+    // Seek to new position
     audio.currentTime = newTime;
     setCurrentTime(newTime);
+    
+    // Resume playing if it was playing before
+    if (wasPlaying && audio.paused) {
+      audio.play().catch(console.error);
+    }
   };
 
   const handleVolume = (newVolume: number) => {
@@ -227,73 +278,69 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2">
+      {/* Add CSS for Peaks.js regions */}
+      <style>{`
+        .peaks-region {
+          border: 2px solid yellow !important;
+          background-color: rgba(255, 255, 0, 0.2) !important;
+        }
+        .peaks-region-label {
+          color: yellow !important;
+          background-color: rgba(0, 0, 0, 0.8) !important;
+        }
+        .peaks-overview-container svg * {
+          stroke: white !important;
+        }
+        .peaks-overview-container svg line {
+          stroke: white !important;
+        }
+        .peaks-overview-container svg path {
+          stroke: white !important;
+        }
+        .peaks-overview-container svg rect {
+          stroke: white !important;
+        }
+        .peaks-overview-container svg circle {
+          stroke: white !important;
+        }
+        .peaks-overview-container svg polygon {
+          stroke: white !important;
+        }
+      `}</style>
+      
       {/* Loading indicator */}
       {(isLoading || displayDuration === 0) && (
-        <div className="flex items-center justify-center p-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <span className="ml-3 text-gray-300">
+        <div className="flex items-center justify-center p-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          <span className="ml-2 text-gray-300 text-sm">
             {displayDuration === 0 ? 'Loading audio...' : 'Loading waveform...'}
           </span>
         </div>
       )}
       
-      {/* Low-res Waveform Placeholder */}
-      {lowResPeaks && (
-        <div className="bg-gray-700 rounded p-2">
-          <div className="text-xs text-gray-400 mb-2">Low-res Waveform ({lowResPeaks.points} points)</div>
-          <div className="w-full h-20 bg-gray-800 rounded border">
-            <svg width="100%" height="100%" viewBox="0 0 100 20" className="w-full h-full">
-              {lowResPeaks.peaks.map((peak: [number, number], index: number) => {
-                const x = (index / lowResPeaks.peaks.length) * 100;
-                const height = Math.abs(peak[1] - peak[0]) * 10;
-                const y = 10 - height / 2;
-                return (
-                  <rect
-                    key={index}
-                    x={x}
-                    y={y}
-                    width="0.5"
-                    height={height}
-                    fill="#0ea5e9"
-                    opacity="0.8"
-                  />
-                );
-              })}
-            </svg>
-          </div>
-        </div>
-      )}
-      
-      {/* Zoomview */}
-      <div className="bg-gray-700 rounded p-2">
-        <div ref={zoomviewContainerRef} style={{ width: '100%', height: '100px' }} />
-      </div>
-      
       {/* Overview */}
-      <div className="bg-gray-700 rounded p-2">
-        <div ref={overviewContainerRef} style={{ width: '100%', height: '150px' }} />
-      </div>
+      <div ref={overviewContainerRef} style={{ width: '100%', height: '150px' }} />
       
       {/* Custom Player Controls - only show when waveform is ready */}
       {useCustomPlayer && displayDuration > 0 ? (
-        <div className="flex items-center justify-between gap-4 bg-gray-800 rounded-lg p-4">
+        <div className="flex items-center gap-3 bg-gray-800 rounded p-3">
           <button
             onClick={togglePlayPause}
-            className="rounded-full p-4 transition-colors duration-300 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+            className="rounded-full p-3 transition-colors duration-300 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
           >
             {isPlaying ? (
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
               </svg>
             ) : (
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z"/>
               </svg>
             )}
           </button>
           
-          <div className="flex-1 mx-6">
+          <div className="flex-1 mx-4">
             <div 
               className="rounded-full h-2 bg-gray-600 cursor-pointer" 
               onClick={handleSeek}
@@ -305,16 +352,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, lowResPeaks, useCustomPlayer = tr
             </div>
           </div>
           
-          <span className="text-gray-300 text-sm min-w-[80px] text-right">
+          <span className="text-gray-300 text-sm min-w-[70px] text-right">
             {formatTime(currentTime)} / {formatTime(displayDuration)}
           </span>
 
           {/* Volume */}
-          <div className="flex items-center gap-2 w-40">
-            <svg className="w-5 h-5 text-gray-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              {/* Speaker base */}
+          <div className="flex items-center gap-2 w-32">
+            <svg className="w-4 h-4 text-gray-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M5 9v6h4l5 4V5L9 9H5z"/>
-              {/* Curvy volume level waves */}
               {volume > 0 && (
                 <path 
                   d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 

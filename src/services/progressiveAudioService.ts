@@ -38,11 +38,17 @@ export interface ProgressiveEvent {
   data: any;
 }
 
+export interface DownloadedAudioInfo {
+  file_path: string;
+  url: string;
+}
+
 export class ProgressiveAudioService {
   private baseUrl = 'http://localhost:5002';
   private eventSources: Map<string, EventSource> = new Map();
   private currentPeaks: ProgressivePeaks | null = null;
   private multiResPeaks: MultiResolutionPeaks | null = null;
+  private downloadedAudioUrl: string | null = null;
 
   /**
    * Start progressive audio processing
@@ -71,6 +77,7 @@ export class ProgressiveAudioService {
     onProgress: (event: ProgressiveEvent) => void,
     onLowResReady?: (peaks: ProgressivePeaks) => void,
     onHighResReady?: (multiRes: MultiResolutionPeaks) => void,
+    onDownloadedAudioReady?: (audioInfo: DownloadedAudioInfo) => void,
     onError?: (error: Event) => void,
     onComplete?: () => void
   ): () => void {
@@ -95,6 +102,15 @@ export class ProgressiveAudioService {
             if (progressEvent.data && progressEvent.data.multi_res_peaks) {
               this.multiResPeaks = progressEvent.data.multi_res_peaks;
               onHighResReady?.(this.multiResPeaks);
+            }
+            // Check for downloaded audio file
+            if (progressEvent.data && progressEvent.data.file_path) {
+              const audioInfo: DownloadedAudioInfo = {
+                file_path: progressEvent.data.file_path,
+                url: `${this.baseUrl}/downloads/${progressEvent.data.file_path.split('/').pop()}`
+              };
+              this.downloadedAudioUrl = audioInfo.url;
+              onDownloadedAudioReady?.(audioInfo);
             }
             break;
           case 'completed':
@@ -141,6 +157,13 @@ export class ProgressiveAudioService {
    */
   getMultiResPeaks(): MultiResolutionPeaks | null {
     return this.multiResPeaks;
+  }
+
+  /**
+   * Get downloaded audio URL
+   */
+  getDownloadedAudioUrl(): string | null {
+    return this.downloadedAudioUrl;
   }
 
   /**

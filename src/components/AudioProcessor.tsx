@@ -43,6 +43,7 @@ const AudioProcessor: React.FC = () => {
   const [lowResPeaks, setLowResPeaks] = useState<any>(null);
   const [showProgressBar, setShowProgressBar] = useState(true);
   const [animatedProgress, setAnimatedProgress] = useState(0);
+  const [downloadedAudioUrl, setDownloadedAudioUrl] = useState<string | null>(null);
 
   // Animate progress smoothly with realistic increments
   useEffect(() => {
@@ -131,6 +132,11 @@ const AudioProcessor: React.FC = () => {
       },
       undefined, // Let ProgressiveWaveform handle low-res peaks
       undefined, // Let ProgressiveWaveform handle multi-res peaks
+      (audioInfo) => {
+        console.log('🎵 Downloaded audio ready:', audioInfo);
+        console.log('🔄 Switching from streaming to downloaded file for better performance');
+        setDownloadedAudioUrl(audioInfo.url);
+      },
       (error) => {
         console.error('Progressive loading error:', error);
         setJobStatus('error');
@@ -717,7 +723,7 @@ const AudioProcessor: React.FC = () => {
                 className="hidden" 
                 preload="auto" 
                 crossOrigin="anonymous"
-                src={resolvedAudioUrl ? (resolvedAudioUrl.startsWith("http://localhost:3001/stream") ? resolvedAudioUrl : `http://localhost:3001/stream?url=${encodeURIComponent(resolvedAudioUrl)}`) : undefined}
+                src={downloadedAudioUrl || (resolvedAudioUrl ? (resolvedAudioUrl.startsWith("http://localhost:3001/stream") ? resolvedAudioUrl : `http://localhost:3001/stream?url=${encodeURIComponent(resolvedAudioUrl)}`) : undefined)}
                 onLoadStart={() => {
                   console.log('Audio loading started');
                   setAudioLoading(true);
@@ -1041,17 +1047,17 @@ const AudioProcessor: React.FC = () => {
                         </div>
                       )}
                       
-                      <Waveform
-                        audioUrl={resolvedAudioUrl || audioUrl}
-                        lowResPeaks={lowResPeaks}
-                        useCustomPlayer={true}
-                        audioRef={audioRef}
-                        duration={duration}
-                        onWaveformReady={() => {
-                          console.log('🎯 Waveform is ready - hiding progress bar');
-                          setShowProgressBar(false);
-                        }}
-                      />
+        <Waveform
+          audioUrl={downloadedAudioUrl || resolvedAudioUrl || audioUrl}
+          lowResPeaks={lowResPeaks}
+          useCustomPlayer={true}
+          audioRef={audioRef}
+          duration={duration}
+          onWaveformReady={() => {
+            console.log('🎯 Waveform is ready - hiding progress bar');
+            setShowProgressBar(false);
+          }}
+        />
                       
                       {/* Export controls */}
                       <div className="mt-6 bg-gray-800 rounded-lg p-4">
