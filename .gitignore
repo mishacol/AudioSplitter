@@ -26,4 +26,22 @@ dist-ssr
 # Python backend artifacts
 python_backend/downloads/
 python_backend/preloaded_audio/
-python_backend/peaks_cache/stream.mp3.high.json
+python_backend/peaks_cache/
+python_backend/cache/
+python_backend/temp/
+python_backend/tmp/
+
+# Node.js server artifacts
+server/downloads/
+server/cache/
+server/temp/
+server/tmp/
+
+# General cache and temporary folders
+cache/
+caches/
+downloads/
+temp/
+tmp/
+.tmp/
+.temp/
