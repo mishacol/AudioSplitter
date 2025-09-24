@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python backend artifacts
+python_backend/downloads/
+python_backend/preloaded_audio/
+python_backend/peaks_cache/stream.mp3.high.json
