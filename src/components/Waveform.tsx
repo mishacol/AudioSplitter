@@ -106,15 +106,15 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     if (duration && Number.isFinite(duration) && duration > 0) {
       return duration;
     }
-    // Fall back to peaks duration
-    const highDur = durationFromPeaks(high);
-    if (highDur > 0) return highDur;
-    const lowDur = durationFromPeaks(low);
-    if (lowDur > 0) return lowDur;
-    // Last resort: expected duration
+    // Prioritize expected duration over placeholder peaks
     if (expectedDuration && Number.isFinite(expectedDuration) && expectedDuration > 0) {
       return expectedDuration;
     }
+    // Fall back to peaks duration (only if not placeholder)
+    const highDur = durationFromPeaks(high);
+    if (highDur > 0) return highDur;
+    const lowDur = durationFromPeaks(low);
+    if (lowDur > 0 && lowDur > 1) return lowDur; // Ignore placeholder durations < 1 second
     return 0;
   })();
 

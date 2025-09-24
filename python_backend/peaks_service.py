@@ -141,7 +141,7 @@ def generate_low_then_high(job: JobStatus) -> None:
 
         # --- LOW RES: write placeholder immediately for instant UI ---
         placeholder = generate_placeholder_peaks(points=1024)
-        low_json = build_peaks_json(job.url, placeholder, 8000, 256, "low", duration_seconds=10)
+        low_json = build_peaks_json(job.url, placeholder, 8000, 256, "low", duration_seconds=0.1)
         with open(cache_path(job.key, "low"), "w", encoding="utf-8") as f:
             json.dump(low_json, f)
         jobs[job.job_id].low_ready = True
