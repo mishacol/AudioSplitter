@@ -157,10 +157,15 @@ def generate_low_then_high(job: JobStatus) -> None:
             with open(cache_path(job.key, "low"), "w", encoding="utf-8") as f:
                 json.dump(low_json, f)
 
-        # --- HIGH RES (full track, background) ---
+        # --- HIGH RES (smart limit for long tracks) ---
         high_sr = 8000
         high_window = 128  # finer detail
-        pcm_high = run_ffmpeg_pcm_stream(job.url, sample_rate=high_sr, seconds_limit=None)
+        
+        # For tracks longer than 10 minutes, limit processing to first 5 minutes
+        # This gives enough detail for splitting while keeping processing fast
+        max_processing_seconds = 300  # 5 minutes max
+        
+        pcm_high = run_ffmpeg_pcm_stream(job.url, sample_rate=high_sr, seconds_limit=max_processing_seconds)
         high_peaks = pcm_to_peaks(pcm_high, sample_rate=high_sr, window_samples=high_window)
         # duration if available: samples / sr
         duration_seconds = len(pcm_high) / 4 / high_sr if pcm_high else None

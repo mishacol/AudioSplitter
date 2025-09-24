@@ -151,8 +151,13 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       const height = cssHeight;
       const midY = height / 2;
       const pixels = Math.max(1, Math.floor(width));
-      // Aggregate peaks to pixel columns
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      
+      // Professional purple waveform like in the screenshot
+      ctx.fillStyle = '#8B5CF6'; // Purple color
+      ctx.strokeStyle = '#8B5CF6';
+      ctx.lineWidth = 1;
+      
+      // Draw waveform as vertical bars (like professional audio editors)
       for (let x = 0; x < pixels; x++) {
         const start = Math.floor((x / pixels) * displayPeaks.length);
         const end = Math.floor(((x + 1) / pixels) * displayPeaks.length);
@@ -161,8 +166,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           const v = Math.abs(displayPeaks[Math.min(i, displayPeaks.length - 1)] || 0);
           if (v > max) max = v;
         }
-        const barH = Math.max(1, max * (height - 10));
-        ctx.fillRect(x, midY - barH / 2, 1, barH);
+        
+        // Draw vertical bar from center line
+        const barHeight = Math.max(1, max * (height - 20) / 2);
+        ctx.fillRect(x, midY - barHeight, 1, barHeight * 2);
       }
     };
 
@@ -170,24 +177,34 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const render = () => {
       const w = rect.width;
       const h = cssHeight;
-      ctx.clearRect(0, 0, w, h);
-
+      
+      // White background like in screenshot
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, w, h);
+      
       // waveform
       drawPeaks();
 
-      // selection
+      // selection overlay (blue like in screenshot)
       if (selectionStart != null && selectionEnd != null && effectiveDuration > 0) {
         const sx = Math.max(0, Math.min(w, (selectionStart / effectiveDuration) * w));
         const ex = Math.max(0, Math.min(w, (selectionEnd / effectiveDuration) * w));
         const left = Math.min(sx, ex);
         const right = Math.max(sx, ex);
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.18)';
+        
+        // Blue selection overlay
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; // Blue overlay
         ctx.fillRect(left, 0, right - left, h);
+        
+        // Grey boundary markers
+        ctx.fillStyle = '#6B7280'; // Grey color
+        ctx.fillRect(left - 1, 0, 2, h);
+        ctx.fillRect(right - 1, 0, 2, h);
       }
 
-      // playhead
+      // playhead (red like in screenshot)
       const x = effectiveDuration > 0 ? (currentTime / effectiveDuration) * w : 0;
-      ctx.fillStyle = '#8b5cf6';
+      ctx.fillStyle = '#EF4444'; // Red playhead
       ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
 
       raf = requestAnimationFrame(render);
