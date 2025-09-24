@@ -127,21 +127,35 @@ class JobStatus:
 
 jobs: Dict[str, JobStatus] = {}
 
+def generate_placeholder_peaks(points: int = 1024) -> List[float]:
+    """Generate a quick placeholder peaks array for instant UX."""
+    # Slight random variations so the user sees a waveform, not a flat line
+    rng = np.random.default_rng()
+    noise = rng.uniform(low=0.02, high=0.25, size=points).astype(np.float32)
+    return [float(x) for x in noise]
+
 
 def generate_low_then_high(job: JobStatus) -> None:
     try:
         jobs[job.job_id].status = "running"
 
-        # --- LOW RES (first ~10s, quick) ---
+        # --- LOW RES: write placeholder immediately for instant UI ---
+        placeholder = generate_placeholder_peaks(points=1024)
+        low_json = build_peaks_json(job.url, placeholder, 8000, 256, "low", duration_seconds=10)
+        with open(cache_path(job.key, "low"), "w", encoding="utf-8") as f:
+            json.dump(low_json, f)
+        jobs[job.job_id].low_ready = True
+
+        # --- LOW RES actual (first ~10s, quick) ---
         low_sr = 8000
         low_seconds = 10
         low_window = 256  # ~32 ms windows at 8kHz
         pcm_low = run_ffmpeg_pcm_stream(job.url, sample_rate=low_sr, seconds_limit=low_seconds)
         low_peaks = pcm_to_peaks(pcm_low, sample_rate=low_sr, window_samples=low_window)
-        low_json = build_peaks_json(job.url, low_peaks, low_sr, low_window, "low", duration_seconds=low_seconds)
-        with open(cache_path(job.key, "low"), "w", encoding="utf-8") as f:
-            json.dump(low_json, f)
-        jobs[job.job_id].low_ready = True
+        if low_peaks:
+            low_json = build_peaks_json(job.url, low_peaks, low_sr, low_window, "low", duration_seconds=low_seconds)
+            with open(cache_path(job.key, "low"), "w", encoding="utf-8") as f:
+                json.dump(low_json, f)
 
         # --- HIGH RES (full track, background) ---
         high_sr = 8000

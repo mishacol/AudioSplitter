@@ -60,6 +60,7 @@
     "lucide-react": "^0.462.0",
     "marked": "^12.0.1",
     "next-themes": "^0.3.0",
+    "pixi.js": "^8.13.2",
     "react": "^19.1.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^19.1.1",

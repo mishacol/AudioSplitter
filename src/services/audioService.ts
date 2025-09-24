@@ -26,7 +26,7 @@ interface AudioResolutionResult {
   release_date_formatted?: string | null;
 }
 
-import { SoundCloudService } from './soundcloudService';
+// Note: We avoid direct SoundCloud API calls (client_id) and rely on the Python backend (yt-dlp)
 
 export class AudioService {
   private static readonly PYTHON_BACKEND_URL = 'http://localhost:5000';
@@ -74,41 +74,14 @@ export class AudioService {
    */
   static async resolveStreamingUrl(url: string): Promise<AudioResolutionResult | null> {
     try {
-      // Check if it's a SoundCloud URL first
-      if (SoundCloudService.isSoundCloudUrl(url)) {
-        console.log('🎵 Detected SoundCloud URL, using SoundCloud API...');
-        
-        const { track, waveform } = await SoundCloudService.getTrackWithWaveform(url);
-        
-        if (track) {
-          const streamUrl = `${this.NODE_STREAM_URL}/stream?url=${encodeURIComponent(track.stream_url)}`;
-          
-          const result: AudioResolutionResult = {
-            url: streamUrl,
-            duration: track.duration,
-            is_progressive: true,
-            title: track.title,
-            format: 'mp3', // SoundCloud typically streams MP3
-            bitrate: '128k', // Default SoundCloud bitrate
-            fileSize: null,
-            thumbnail: track.artwork_url,
-            waveform_data: waveform ? SoundCloudService.convertWaveformData(waveform) : undefined
-          };
-          
-          console.log('🎵 SoundCloud result:', result);
-          return result;
-        }
-      }
-      
-      // Fallback to Python backend for other URLs
-      console.log('🎵 Using Python backend for non-SoundCloud URL...');
+      // Prefer Python backend (yt-dlp) for ALL URLs (YouTube, SoundCloud, etc.)
+      console.log('🎵 Resolving via Python backend...');
       const metadata = await this.extractMetadata(url);
       
       if (metadata) {
-        // For YouTube/SoundCloud, use the Node.js streaming server
-        const streamUrl = metadata.direct_audio_url 
-          ? `${this.NODE_STREAM_URL}/stream?url=${encodeURIComponent(metadata.direct_audio_url)}` 
-          : null;
+        // Prefer backend-provided direct URL; otherwise proxy original via Node server
+        const resolved = metadata.direct_audio_url ?? url;
+        const streamUrl = `${this.NODE_STREAM_URL}/stream?url=${encodeURIComponent(resolved)}`;
         
         const result: AudioResolutionResult = { 
           url: streamUrl, 
@@ -128,7 +101,9 @@ export class AudioService {
         return result;
       }
       
-      return null;
+      // Last resort: stream original URL through Node server without metadata
+      const fallback = this.getFallbackStreamUrl(url);
+      return { url: fallback, duration: null, is_progressive: true };
     } catch (error) {
       console.error('URL resolution failed:', error);
       return null;

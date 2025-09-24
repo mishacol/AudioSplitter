@@ -36,7 +36,16 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       {/* Waveform (Canvas/Pixi placeholder) */}
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-white text-lg font-semibold mb-4">Interactive Waveform</h3>
-        <Waveform audioUrl={audioUrl} />
+        <Waveform
+          audioUrl={audioUrl}
+          expectedDuration={duration}
+          selection={{ start: selectionStart, end: selectionEnd }}
+          onSelectionChange={(s, e) => {
+            if (typeof s === 'number') setSelectionStart(s);
+            if (typeof e === 'number') setSelectionEnd(e);
+          }}
+          onWaveformReady={() => console.log('Waveform ready (low-res)')}
+        />
       </div>
 
       {/* Selection Controls */}
