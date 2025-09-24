@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import Peaks from 'peaks.js';
 import { Loader2 } from 'lucide-react';
 
 type Props = {
@@ -8,9 +7,7 @@ type Props = {
 
 const Waveform: React.FC<Props> = ({ audioUrl }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const overviewContainerRef = useRef<HTMLDivElement | null>(null);
-  const zoomviewContainerRef = useRef<HTMLDivElement | null>(null);
-  const [isPeaksReady, setIsPeaksReady] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -78,73 +75,34 @@ const Waveform: React.FC<Props> = ({ audioUrl }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Проверяем готовность DOM элементов
+  // Canvas placeholder for Pixi waveform
   useEffect(() => {
-    if (audioRef.current && overviewContainerRef.current && zoomviewContainerRef.current) {
-      setIsPeaksReady(true);
-    } else {
-      setIsPeaksReady(false);
-    }
-  }, [audioUrl]);
-
-  // Инициализируем Peaks.js только когда все готово
-  useEffect(() => {
-    if (!isPeaksReady) {
-      console.log('Peaks.js refs not yet ready.');
-      return;
-    }
-
-    console.log('Initializing Peaks.js...');
-    console.log('Audio element:', audioRef.current);
-    console.log('Overview container:', overviewContainerRef.current);
-    console.log('Zoomview container:', zoomviewContainerRef.current);
-
-    const options = {
-      zoomview: {
-        container: zoomviewContainerRef.current!
-      },
-      overview: {
-        container: overviewContainerRef.current!
-      },
-      mediaElement: audioRef.current!,
-      webAudio: {
-        audioContext: new (window.AudioContext || (window as any).webkitAudioContext)(),
-      },
+    const canvas = canvasRef.current;
+    const audio = audioRef.current;
+    if (!canvas || !audio) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    const draw = () => {
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fillRect(0, h / 2 - 2, w, 4);
+      const x = duration > 0 ? (currentTime / duration) * w : 0;
+      ctx.fillStyle = '#8b5cf6';
+      ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
+      raf = requestAnimationFrame(draw);
     };
-
-    Peaks.init(options, (err, peaks) => {
-      if (err) {
-        console.error('Peaks init error:', err);
-        return;
-      }
-
-      console.log('Peaks.js initialized successfully!');
-      
-      // Добавляем кастомный курсор (пример)
-      peaks.views.getView('overview').enableSeek(true);
-
-      // Можно подписаться на события (например, перемещение курсора)
-      peaks.on('player.seeked', (time: number) => {
-        console.log('Cursor moved to', time);
-      });
-    });
-
-    return () => {
-      // cleanup при размонтировании
-      // Peaks.js автоматически очищается при размонтировании компонента
-    };
-  }, [isPeaksReady, audioUrl]);
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [currentTime, duration]);
 
   return (
     <div className="space-y-4">
-      {/* Zoomview */}
+      {/* Canvas waveform placeholder */}
       <div className="bg-gray-700 rounded p-2">
-        <div ref={zoomviewContainerRef} style={{ width: '100%', height: '100px' }} />
-      </div>
-      
-      {/* Overview */}
-      <div className="bg-gray-700 rounded p-2">
-        <div ref={overviewContainerRef} style={{ width: '100%', height: '150px' }} />
+        <canvas ref={canvasRef} width={1200} height={150} style={{ width: '100%', height: 150 }} />
       </div>
       
       {/* Custom Player Controls */}

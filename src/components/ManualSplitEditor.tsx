@@ -33,7 +33,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
 
   return (
     <div className="w-full space-y-6">
-      {/* Waveform with Peaks.js */}
+      {/* Waveform (Canvas/Pixi placeholder) */}
       <div className="bg-gray-800 rounded-lg p-6">
         <h3 className="text-white text-lg font-semibold mb-4">Interactive Waveform</h3>
         <Waveform audioUrl={audioUrl} />
