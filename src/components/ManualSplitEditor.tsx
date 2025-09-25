@@ -54,8 +54,10 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
 
   // Validate time inputs (only critical errors)
   const validateTimes = (start: number, end: number): string | null => {
+    console.log('Validating times:', { start, end, duration, startExceeds: start > duration, endExceeds: end > duration });
     if (start < 0 || end < 0) return "Time cannot be negative";
-    if (start > duration || end > duration) return "Time cannot exceed track duration";
+    // Add small tolerance for floating point precision issues
+    if (start > duration + 0.1 || end > duration + 0.1) return "Time cannot exceed track duration";
     if (end < start) return "End time must be greater than start time";
     // Note: We don't validate zero-duration here - that's handled by the note and disabled button
     return null;
@@ -63,7 +65,9 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
 
   // Check if selection is valid for export
   const isSelectionValidForExport = (start: number, end: number): boolean => {
-    return end > start && start >= 0 && end <= duration;
+    console.log('Checking export validity:', { start, end, duration, endGreaterThanStart: end > start, endWithinDuration: end <= duration });
+    // Add small tolerance for floating point precision issues
+    return end > start && start >= 0 && end <= duration + 0.1;
   };
 
   // Handle start time change

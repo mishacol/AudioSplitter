@@ -29,6 +29,8 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   const [zoomCenter, setZoomCenter] = useState<number | null>(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
   const [dragMode, setDragMode] = useState<'selection' | 'leftHandle' | 'rightHandle' | null>(null);
+  const [hoveredHandle, setHoveredHandle] = useState<'leftHandle' | 'rightHandle' | null>(null);
+  const [isLoopMode, setIsLoopMode] = useState(false);
 
   // Sync selection prop to internal state
   useEffect(() => {
@@ -43,7 +45,22 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleTimeUpdate = () => {
+      const currentTime = audio.currentTime;
+      setCurrentTime(currentTime);
+      
+      // Check if we're in loop mode and playhead has reached the end of selection
+      if (isLoopMode && selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd) {
+        const startTime = Math.min(selectionStart, selectionEnd);
+        const endTime = Math.max(selectionStart, selectionEnd);
+        
+        // If playhead has reached or passed the end of selection, loop back to start
+        if (currentTime >= endTime) {
+          audio.currentTime = startTime;
+          setCurrentTime(startTime);
+        }
+      }
+    };
     const handleDurationChange = () => setDuration(audio.duration || 0);
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
@@ -67,7 +84,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [audioUrl]);
+  }, [audioUrl, isLoopMode, selectionStart, selectionEnd]);
 
   // Player functions
   const togglePlayPause = () => {
@@ -247,10 +264,38 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           ctx.fillStyle = 'rgba(255, 165, 0, 0.3)'; // Bright orange overlay
           ctx.fillRect(left, 0, right - left, h);
           
-          // Bright orange boundary markers
-          ctx.fillStyle = '#FFA500'; // Bright orange color
-          ctx.fillRect(left - 1, 0, 2, h);
-          ctx.fillRect(right - 1, 0, 2, h);
+          // Enhanced handles with hover effects
+          const handleWidth = 6; // Thicker handles
+          const handleHeight = h;
+          
+          // Left handle
+          const isLeftHovered = hoveredHandle === 'leftHandle';
+          const isLeftDragging = dragMode === 'leftHandle';
+          ctx.fillStyle = isLeftHovered || isLeftDragging ? '#FF8C00' : '#FFA500'; // Darker orange when hovered/dragging
+          ctx.fillRect(left - handleWidth/2, 0, handleWidth, handleHeight);
+          
+          // Right handle
+          const isRightHovered = hoveredHandle === 'rightHandle';
+          const isRightDragging = dragMode === 'rightHandle';
+          ctx.fillStyle = isRightHovered || isRightDragging ? '#FF8C00' : '#FFA500'; // Darker orange when hovered/dragging
+          ctx.fillRect(right - handleWidth/2, 0, handleWidth, handleHeight);
+          
+          // Draw double arrows on hover
+          if (isLeftHovered || isLeftDragging) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⟷', left, h/2);
+          }
+          
+          if (isRightHovered || isRightDragging) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⟷', right, h/2);
+          }
         }
       }
 
@@ -265,8 +310,18 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         
         // Only draw playhead if it's visible in current zoom window
         if (x >= 0 && x <= w) {
-          ctx.fillStyle = '#EF4444'; // Red playhead
+          // Change playhead color when in loop mode
+          ctx.fillStyle = isLoopMode ? '#10B981' : '#EF4444'; // Green when looping, red normally
           ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
+          
+          // Add loop indicator when in loop mode
+          if (isLoopMode) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('↻', x, 5);
+          }
         }
       }
 
@@ -275,7 +330,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
 
     raf = requestAnimationFrame(render);
     return () => cancelAnimationFrame(raf);
-  }, [currentTime, effectiveDuration, displayPeaks, selectionStart, selectionEnd, zoomLevel, zoomCenter]);
+  }, [currentTime, effectiveDuration, displayPeaks, selectionStart, selectionEnd, zoomLevel, zoomCenter, hoveredHandle, dragMode, isLoopMode]);
 
   // Start peaks job when audioUrl changes
   useEffect(() => {
@@ -338,6 +393,29 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       setCurrentTime(startTime);
     }
   }, [selectionStart, selectionEnd]);
+
+  // Monitor playhead position for loop mode
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !selectionStart || !selectionEnd || selectionStart === selectionEnd) {
+      setIsLoopMode(false);
+      return;
+    }
+    
+    const startTime = Math.min(selectionStart, selectionEnd);
+    const endTime = Math.max(selectionStart, selectionEnd);
+    
+    // Check if playhead is inside selection
+    const isInsideSelection = currentTime >= startTime && currentTime <= endTime;
+    
+    if (isInsideSelection && !isLoopMode) {
+      // Entered selection - enable loop mode
+      setIsLoopMode(true);
+    } else if (!isInsideSelection && isLoopMode) {
+      // Exited selection - disable loop mode
+      setIsLoopMode(false);
+    }
+  }, [currentTime, selectionStart, selectionEnd, isLoopMode]);
 
   // Auto-scroll to follow playhead when zoomed in
   useEffect(() => {
@@ -518,17 +596,27 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       setZoomLevel(newZoomLevel);
     };
 
+    const onMouseMove = (e: MouseEvent) => {
+      // Check for handle hover (only when not dragging)
+      if (!isDragging) {
+        const handle = getHandleAt(e.clientX);
+        setHoveredHandle(handle);
+      }
+    };
+
     canvas.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('mousemove', onMouseMove);
     return () => {
       canvas.removeEventListener('mousedown', onDown);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('mousemove', onMouseMove);
     };
-  }, [effectiveDuration, isDragging, selectionStart, zoomLevel, zoomCenter, dragMode]);
+  }, [effectiveDuration, isDragging, selectionStart, zoomLevel, zoomCenter, dragMode, hoveredHandle]);
 
   return (
     <div className="space-y-4">

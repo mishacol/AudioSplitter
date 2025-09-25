@@ -788,7 +788,7 @@ const AudioProcessor: React.FC = () => {
                   <div className="space-y-4">
                     <div className="text-center">
                       <p className="text-gray-300 text-sm mb-4">
-                        Click and drag on the waveform to create a selection, or export without selecting to save the full track.
+                        Drag the orange handles on the waveform to create a selection, or select the entire waveform to export the full track.
                       </p>
                     </div>
                     
