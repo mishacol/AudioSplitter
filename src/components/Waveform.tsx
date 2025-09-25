@@ -255,6 +255,19 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     }
   }, [low, high]);
 
+  // Auto-jump playhead to selection start when selection is created
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !selectionStart || !selectionEnd) return;
+    
+    // Only jump if we have a valid selection and it's not a zero-width selection
+    if (selectionStart !== selectionEnd) {
+      const startTime = Math.min(selectionStart, selectionEnd);
+      audio.currentTime = startTime;
+      setCurrentTime(startTime);
+    }
+  }, [selectionStart, selectionEnd]);
+
   // Canvas mouse interactions: click-to-seek + drag-select
   useEffect(() => {
     const canvas = canvasRef.current;
