@@ -25,6 +25,9 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
   const initialClickTimeRef = useRef<number | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [zoomCenter, setZoomCenter] = useState<number | null>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
 
   // Sync selection prop to internal state
   useEffect(() => {
@@ -111,6 +114,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   };
 
   const effectiveDuration = (() => {
+    // If we have high-res peaks, use their duration (this is the actual processed audio length)
+    const highDur = durationFromPeaks(high);
+    if (highDur > 0) return highDur;
+    
     // Check if audio duration is valid (not 0, not Infinity, not NaN)
     if (duration && Number.isFinite(duration) && duration > 0) {
       return duration;
@@ -119,9 +126,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     if (expectedDuration && Number.isFinite(expectedDuration) && expectedDuration > 0) {
       return expectedDuration;
     }
-    // Fall back to peaks duration (only if not placeholder)
-    const highDur = durationFromPeaks(high);
-    if (highDur > 0) return highDur;
+    // Fall back to low-res peaks duration (only if not placeholder)
     const lowDur = durationFromPeaks(low);
     if (lowDur > 0 && lowDur > 1) return lowDur; // Ignore placeholder durations < 1 second
     return 0;
@@ -166,19 +171,27 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       ctx.strokeStyle = '#8B5CF6';
       ctx.lineWidth = 1;
       
+      // Calculate zoom parameters
+      const centerTime = zoomCenter || effectiveDuration / 2;
+      const visibleDuration = effectiveDuration / zoomLevel;
+      const startTime = Math.max(0, centerTime - visibleDuration / 2);
+      const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
+      
       // Draw waveform as vertical bars (like professional audio editors)
       for (let x = 0; x < pixels; x++) {
-        const start = Math.floor((x / pixels) * displayPeaks.length);
-        const end = Math.floor(((x + 1) / pixels) * displayPeaks.length);
-        let max = 0;
-        for (let i = start; i < Math.max(start + 1, end); i++) {
-          const v = Math.abs(displayPeaks[Math.min(i, displayPeaks.length - 1)] || 0);
-          if (v > max) max = v;
-        }
+        // Map screen pixel to time
+        const screenTime = startTime + (x / pixels) * (endTime - startTime);
         
-        // Draw vertical bar from center line
-        const barHeight = Math.max(1, max * (height - 20) / 2);
-        ctx.fillRect(x, midY - barHeight, 1, barHeight * 2);
+        // Map time to peaks array index
+        const peakIndex = Math.floor((screenTime / effectiveDuration) * displayPeaks.length);
+        
+        if (peakIndex >= 0 && peakIndex < displayPeaks.length) {
+          const v = Math.abs(displayPeaks[peakIndex] || 0);
+          
+          // Draw vertical bar from center line
+          const barHeight = Math.max(1, v * (height - 20) / 2);
+          ctx.fillRect(x, midY - barHeight, 1, barHeight * 2);
+        }
       }
     };
 
@@ -196,32 +209,53 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
 
       // selection overlay (blue like in screenshot)
       if (selectionStart != null && selectionEnd != null && effectiveDuration > 0) {
-        const sx = Math.max(0, Math.min(w, (selectionStart / effectiveDuration) * w));
-        const ex = Math.max(0, Math.min(w, (selectionEnd / effectiveDuration) * w));
+        // Calculate zoom parameters for selection rendering
+        const centerTime = zoomCenter || effectiveDuration / 2;
+        const visibleDuration = effectiveDuration / zoomLevel;
+        const startTime = Math.max(0, centerTime - visibleDuration / 2);
+        const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
+        
+        // Map selection times to screen coordinates
+        const sx = ((selectionStart - startTime) / (endTime - startTime)) * w;
+        const ex = ((selectionEnd - startTime) / (endTime - startTime)) * w;
         const left = Math.min(sx, ex);
         const right = Math.max(sx, ex);
         
-        // Blue selection overlay
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; // Blue overlay
-        ctx.fillRect(left, 0, right - left, h);
-        
-        // Grey boundary markers
-        ctx.fillStyle = '#6B7280'; // Grey color
-        ctx.fillRect(left - 1, 0, 2, h);
-        ctx.fillRect(right - 1, 0, 2, h);
+        // Only draw selection if it's visible in current zoom window
+        if (right >= 0 && left <= w) {
+          // Blue selection overlay
+          ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; // Blue overlay
+          ctx.fillRect(left, 0, right - left, h);
+          
+          // Grey boundary markers
+          ctx.fillStyle = '#6B7280'; // Grey color
+          ctx.fillRect(left - 1, 0, 2, h);
+          ctx.fillRect(right - 1, 0, 2, h);
+        }
       }
 
       // playhead (red like in screenshot)
-      const x = effectiveDuration > 0 ? (currentTime / effectiveDuration) * w : 0;
-      ctx.fillStyle = '#EF4444'; // Red playhead
-      ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
+      if (effectiveDuration > 0) {
+        const centerTime = zoomCenter || effectiveDuration / 2;
+        const visibleDuration = effectiveDuration / zoomLevel;
+        const startTime = Math.max(0, centerTime - visibleDuration / 2);
+        const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
+        
+        const x = ((currentTime - startTime) / (endTime - startTime)) * w;
+        
+        // Only draw playhead if it's visible in current zoom window
+        if (x >= 0 && x <= w) {
+          ctx.fillStyle = '#EF4444'; // Red playhead
+          ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
+        }
+      }
 
       raf = requestAnimationFrame(render);
     };
 
     raf = requestAnimationFrame(render);
     return () => cancelAnimationFrame(raf);
-  }, [currentTime, effectiveDuration, displayPeaks, selectionStart, selectionEnd]);
+  }, [currentTime, effectiveDuration, displayPeaks, selectionStart, selectionEnd, zoomLevel, zoomCenter]);
 
   // Start peaks job when audioUrl changes
   useEffect(() => {
@@ -276,6 +310,40 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     }
   }, [selectionStart, selectionEnd]);
 
+  // Auto-scroll to follow playhead when zoomed in
+  useEffect(() => {
+    if (!autoScrollEnabled || !isPlaying || zoomLevel <= 1) return;
+    
+    const centerTime = zoomCenter || effectiveDuration / 2;
+    const visibleDuration = effectiveDuration / zoomLevel;
+    const startTime = Math.max(0, centerTime - visibleDuration / 2);
+    const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
+    
+    // Check if playhead is outside visible range
+    if (currentTime < startTime || currentTime > endTime) {
+      // Smoothly scroll to center playhead
+      setZoomCenter(currentTime);
+    }
+  }, [currentTime, isPlaying, autoScrollEnabled, zoomLevel, effectiveDuration, zoomCenter]);
+
+  // Zoom to selection when selection is created
+  useEffect(() => {
+    if (!selectionStart || !selectionEnd || selectionStart === selectionEnd) return;
+    
+    const selectionDuration = Math.abs(selectionEnd - selectionStart);
+    const selectionCenter = (selectionStart + selectionEnd) / 2;
+    
+    // Calculate zoom level to fit selection with some padding
+    const padding = 0.2; // 20% padding on each side
+    const targetZoomLevel = effectiveDuration / (selectionDuration * (1 + padding * 2));
+    
+    // Only zoom if it's a meaningful zoom (not too extreme)
+    if (targetZoomLevel > 1 && targetZoomLevel < 16) {
+      setZoomLevel(targetZoomLevel);
+      setZoomCenter(selectionCenter);
+    }
+  }, [selectionStart, selectionEnd, effectiveDuration]);
+
   // Canvas mouse interactions: click-to-seek + drag-select
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -285,7 +353,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const getTimeAt = (clientX: number) => {
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
-      return ratio * (effectiveDuration || audio.duration || 0);
+      
+      // Calculate zoom parameters
+      const centerTime = zoomCenter || effectiveDuration / 2;
+      const visibleDuration = effectiveDuration / zoomLevel;
+      const startTime = Math.max(0, centerTime - visibleDuration / 2);
+      const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
+      
+      return startTime + ratio * (endTime - startTime);
     };
 
     let dragStartTime = 0;
@@ -337,15 +412,41 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       }
     };
 
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      
+      // Only allow zooming if high-res peaks are loaded
+      if (!high || !effectiveDuration || effectiveDuration <= 0) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseTime = getTimeAt(e.clientX);
+      
+      // Set zoom center to mouse position if not already set
+      if (zoomCenter === null) {
+        setZoomCenter(mouseTime);
+      }
+      
+      // Calculate zoom change
+      const zoomFactor = e.deltaY > 0 ? 0.8 : 1.25; // Zoom out on scroll down, zoom in on scroll up
+      const newZoomLevel = Math.max(0.1, Math.min(32, zoomLevel * zoomFactor));
+      
+      // Update zoom center to mouse position for smooth zooming
+      setZoomCenter(mouseTime);
+      setZoomLevel(newZoomLevel);
+    };
+
     canvas.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       canvas.removeEventListener('mousedown', onDown);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      canvas.removeEventListener('wheel', onWheel);
     };
-  }, [effectiveDuration, isDragging, selectionStart]);
+  }, [effectiveDuration, isDragging, selectionStart, zoomLevel, zoomCenter]);
 
   return (
     <div className="space-y-4">

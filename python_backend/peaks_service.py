@@ -161,9 +161,9 @@ def generate_low_then_high(job: JobStatus) -> None:
         high_sr = 8000
         high_window = 128  # finer detail
         
-        # For tracks longer than 10 minutes, limit processing to first 5 minutes
-        # This gives enough detail for splitting while keeping processing fast
-        max_processing_seconds = 300  # 5 minutes max
+        # Process the full track for accurate waveform representation
+        # This gives complete detail for the entire track
+        max_processing_seconds = None  # No limit - process full track
         
         pcm_high = run_ffmpeg_pcm_stream(job.url, sample_rate=high_sr, seconds_limit=max_processing_seconds)
         high_peaks = pcm_to_peaks(pcm_high, sample_rate=high_sr, window_samples=high_window)
