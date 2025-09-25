@@ -54,8 +54,16 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         const startTime = Math.min(selectionStart, selectionEnd);
         const endTime = Math.max(selectionStart, selectionEnd);
         
+        console.log('Loop check in timeUpdate:', { 
+          currentTime, 
+          startTime, 
+          endTime, 
+          shouldLoop: currentTime >= endTime 
+        });
+        
         // If playhead has reached or passed the end of selection, loop back to start
         if (currentTime >= endTime) {
+          console.log('Looping back to start:', startTime);
           audio.currentTime = startTime;
           setCurrentTime(startTime);
         }
@@ -264,8 +272,8 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           ctx.fillStyle = 'rgba(255, 165, 0, 0.3)'; // Bright orange overlay
           ctx.fillRect(left, 0, right - left, h);
           
-          // Enhanced handles with hover effects
-          const handleWidth = 6; // Thicker handles
+          // Enhanced handles with hollow grip design for better drag affordance
+          const handleWidth = 4; // Thinner handles (was 6)
           const handleHeight = h;
           
           // Left handle
@@ -279,6 +287,20 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           const isRightDragging = dragMode === 'rightHandle';
           ctx.fillStyle = isRightHovered || isRightDragging ? '#FF8C00' : '#FFA500'; // Darker orange when hovered/dragging
           ctx.fillRect(right - handleWidth/2, 0, handleWidth, handleHeight);
+          
+          // Add hollow rectangular grip in the center of each handle
+          ctx.fillStyle = '#FFFFFF'; // White background for the hollow area
+          const gripWidth = 4;
+          const gripHeight = 20;
+          const gripX = left - gripWidth/2;
+          const gripY = (handleHeight - gripHeight) / 2;
+          
+          // Left handle hollow grip
+          ctx.fillRect(gripX, gripY, gripWidth, gripHeight);
+          
+          // Right handle hollow grip
+          const rightGripX = right - gripWidth/2;
+          ctx.fillRect(rightGripX, gripY, gripWidth, gripHeight);
           
           // Draw double arrows on hover
           if (isLeftHovered || isLeftDragging) {
@@ -386,9 +408,12 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const audio = audioRef.current;
     if (!audio || !selectionStart || !selectionEnd) return;
     
+    console.log('Auto-jump check:', { selectionStart, selectionEnd, currentTime });
+    
     // Only jump if we have a valid selection and it's not a zero-width selection
     if (selectionStart !== selectionEnd) {
       const startTime = Math.min(selectionStart, selectionEnd);
+      console.log('Auto-jumping playhead to:', startTime);
       audio.currentTime = startTime;
       setCurrentTime(startTime);
     }
@@ -408,11 +433,21 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     // Check if playhead is inside selection
     const isInsideSelection = currentTime >= startTime && currentTime <= endTime;
     
+    console.log('Loop mode check:', { 
+      currentTime, 
+      startTime, 
+      endTime, 
+      isInsideSelection, 
+      isLoopMode 
+    });
+    
     if (isInsideSelection && !isLoopMode) {
       // Entered selection - enable loop mode
+      console.log('Entering loop mode');
       setIsLoopMode(true);
     } else if (!isInsideSelection && isLoopMode) {
       // Exited selection - disable loop mode
+      console.log('Exiting loop mode');
       setIsLoopMode(false);
     }
   }, [currentTime, selectionStart, selectionEnd, isLoopMode]);
