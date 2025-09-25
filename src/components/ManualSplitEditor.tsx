@@ -113,7 +113,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   return (
     <div className="w-full space-y-6">
       {/* Waveform (Canvas/Pixi placeholder) */}
-      <div className="bg-gray-800 rounded-lg p-6">
+      <div className="bg-transparent rounded-lg p-6">
         {!isWaveformReady && (
           <div className="flex items-center space-x-3 mb-4">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>

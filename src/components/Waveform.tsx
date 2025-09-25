@@ -24,6 +24,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   const [isDragging, setIsDragging] = useState(false);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+  const initialClickTimeRef = useRef<number | null>(null);
 
   // Sync selection prop to internal state
   useEffect(() => {
@@ -298,6 +299,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       setIsDragging(true);
       
       const t = getTimeAt(e.clientX);
+      initialClickTimeRef.current = t;
       setSelectionStart(t);
       setSelectionEnd(t);
       onSelectionChange?.(t, t);
@@ -312,8 +314,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       }
       
       const t = getTimeAt(e.clientX);
-      setSelectionEnd(t);
-      onSelectionChange?.(selectionStart, t);
+      
+      // Always assign leftmost position to start and rightmost to end
+      const start = Math.min(initialClickTimeRef.current || 0, t);
+      const end = Math.max(initialClickTimeRef.current || 0, t);
+      
+      setSelectionStart(start);
+      setSelectionEnd(end);
+      onSelectionChange?.(start, end);
     };
 
     const onUp = (e: MouseEvent) => {
@@ -342,7 +350,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   return (
     <div className="space-y-4">
       {/* Canvas waveform placeholder */}
-      <div className="bg-gray-700 rounded p-2 select-none">
+      <div className="bg-transparent rounded p-2 select-none">
         <canvas ref={canvasRef} style={{ width: '100%', height: 150 }} />
       </div>
       
