@@ -28,6 +28,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   const [zoomLevel, setZoomLevel] = useState(1);
   const [zoomCenter, setZoomCenter] = useState<number | null>(null);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [dragMode, setDragMode] = useState<'selection' | 'leftHandle' | 'rightHandle' | null>(null);
 
   // Sync selection prop to internal state
   useEffect(() => {
@@ -169,7 +170,17 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const drawPeaks = () => {
-      if (!displayPeaks || displayPeaks.length === 0) return;
+      console.log('drawPeaks called:', { 
+        displayPeaks: displayPeaks ? displayPeaks.length : null,
+        effectiveDuration,
+        width: rect.width,
+        height: cssHeight
+      });
+      
+      if (!displayPeaks || displayPeaks.length === 0) {
+        console.log('No displayPeaks to draw');
+        return;
+      }
       const width = rect.width;
       const height = cssHeight;
       const midY = height / 2;
@@ -299,10 +310,19 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
 
   // Pick peaks to display (prefer high-res when ready)
   useEffect(() => {
+    console.log('Peaks update:', { 
+      high: high ? { points: high.points, duration: high.duration, peaksLength: high.peaks?.length } : null,
+      low: low ? { points: low.points, duration: low.duration, peaksLength: low.peaks?.length } : null
+    });
+    
     if (high && Array.isArray(high.peaks) && high.peaks.length > 0) {
+      console.log('Setting displayPeaks to high-res:', high.peaks.length, 'peaks');
       setDisplayPeaks(high.peaks);
     } else if (low && Array.isArray(low.peaks) && low.peaks.length > 0) {
+      console.log('Setting displayPeaks to low-res:', low.peaks.length, 'peaks');
       setDisplayPeaks(low.peaks);
+    } else {
+      console.log('No valid peaks to display');
     }
   }, [low, high]);
 
@@ -372,6 +392,38 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       return startTime + ratio * (endTime - startTime);
     };
 
+    // Check which handle is being clicked (if any)
+    const getHandleAt = (clientX: number): 'leftHandle' | 'rightHandle' | null => {
+      if (!selectionStart || !selectionEnd || selectionStart === selectionEnd) return null;
+      
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = clientX - rect.left;
+      
+      // Calculate zoom parameters
+      const centerTime = zoomCenter || effectiveDuration / 2;
+      const visibleDuration = effectiveDuration / zoomLevel;
+      const startTime = Math.max(0, centerTime - visibleDuration / 2);
+      const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
+      
+      // Map selection times to screen coordinates
+      const leftX = ((selectionStart - startTime) / (endTime - startTime)) * rect.width;
+      const rightX = ((selectionEnd - startTime) / (endTime - startTime)) * rect.width;
+      
+      const handleWidth = 8; // Handle detection area (wider than visual marker)
+      
+      // Check if mouse is over left handle
+      if (mouseX >= leftX - handleWidth/2 && mouseX <= leftX + handleWidth/2) {
+        return 'leftHandle';
+      }
+      
+      // Check if mouse is over right handle
+      if (mouseX >= rightX - handleWidth/2 && mouseX <= rightX + handleWidth/2) {
+        return 'rightHandle';
+      }
+      
+      return null;
+    };
+
     let dragStartTime = 0;
     let isClick = true;
 
@@ -382,6 +434,15 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       isClick = true;
       setIsDragging(true);
       
+      // Check if clicking on a handle
+      const handle = getHandleAt(e.clientX);
+      if (handle) {
+        setDragMode(handle);
+        return; // Don't create new selection when dragging handles
+      }
+      
+      // Normal selection creation
+      setDragMode('selection');
       const t = getTimeAt(e.clientX);
       initialClickTimeRef.current = t;
       setSelectionStart(t);
@@ -399,21 +460,34 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       
       const t = getTimeAt(e.clientX);
       
-      // Always assign leftmost position to start and rightmost to end
-      const start = Math.min(initialClickTimeRef.current || 0, t);
-      const end = Math.max(initialClickTimeRef.current || 0, t);
-      
-      setSelectionStart(start);
-      setSelectionEnd(end);
-      onSelectionChange?.(start, end);
+      if (dragMode === 'leftHandle') {
+        // Drag left handle - update start time only, constrained by right handle
+        const newStart = Math.max(0, Math.min(t, selectionEnd || 0));
+        setSelectionStart(newStart);
+        onSelectionChange?.(newStart, selectionEnd);
+      } else if (dragMode === 'rightHandle') {
+        // Drag right handle - update end time only, constrained by left handle
+        const newEnd = Math.min(effectiveDuration, Math.max(t, selectionStart || 0));
+        setSelectionEnd(newEnd);
+        onSelectionChange?.(selectionStart, newEnd);
+      } else if (dragMode === 'selection') {
+        // Normal selection drag
+        const start = Math.min(initialClickTimeRef.current || 0, t);
+        const end = Math.max(initialClickTimeRef.current || 0, t);
+        
+        setSelectionStart(start);
+        setSelectionEnd(end);
+        onSelectionChange?.(start, end);
+      }
     };
 
     const onUp = (e: MouseEvent) => {
       // Always handle mouse up, regardless of dragging state
       setIsDragging(false);
+      setDragMode(null);
       
       // If it was a click (not a drag), seek to that position
-      if (isClick && e.target === canvas) {
+      if (isClick && e.target === canvas && dragMode === 'selection') {
         const t = getTimeAt(e.clientX);
         audio.currentTime = t;
         setCurrentTime(t);
@@ -454,7 +528,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       window.removeEventListener('mouseup', onUp);
       canvas.removeEventListener('wheel', onWheel);
     };
-  }, [effectiveDuration, isDragging, selectionStart, zoomLevel, zoomCenter]);
+  }, [effectiveDuration, isDragging, selectionStart, zoomLevel, zoomCenter, dragMode]);
 
   return (
     <div className="space-y-4">
