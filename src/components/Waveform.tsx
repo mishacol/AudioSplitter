@@ -255,7 +255,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     }
   }, [low, high]);
 
-  // Canvas mouse interactions: drag-select only (no outside click seek)
+  // Canvas mouse interactions: click-to-seek + drag-select
   useEffect(() => {
     const canvas = canvasRef.current;
     const audio = audioRef.current;
@@ -267,23 +267,46 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       return ratio * (effectiveDuration || audio.duration || 0);
     };
 
+    let dragStartTime = 0;
+    let isClick = true;
+
     const onDown = (e: MouseEvent) => {
       if (e.target !== canvas) return; // ignore clicks outside canvas
+      
+      dragStartTime = Date.now();
+      isClick = true;
       setIsDragging(true);
+      
       const t = getTimeAt(e.clientX);
       setSelectionStart(t);
       setSelectionEnd(t);
       onSelectionChange?.(t, t);
     };
+
     const onMove = (e: MouseEvent) => {
       if (!isDragging) return;
+      
+      // If mouse moved significantly, it's a drag, not a click
+      if (Date.now() - dragStartTime > 100) {
+        isClick = false;
+      }
+      
       const t = getTimeAt(e.clientX);
       setSelectionEnd(t);
       onSelectionChange?.(selectionStart, t);
     };
+
     const onUp = (e: MouseEvent) => {
-      if (!isDragging) return; // do not treat outside clicks as seek
+      if (!isDragging) return;
+      
       setIsDragging(false);
+      
+      // If it was a click (not a drag), seek to that position
+      if (isClick && e.target === canvas) {
+        const t = getTimeAt(e.clientX);
+        audio.currentTime = t;
+        setCurrentTime(t);
+      }
     };
 
     canvas.addEventListener('mousedown', onDown);
@@ -294,7 +317,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [effectiveDuration, isDragging]);
+  }, [effectiveDuration, isDragging, selectionStart]);
 
   return (
     <div className="space-y-4">
