@@ -44,7 +44,8 @@ const AudioProcessor: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [hasTriedStreamFallback, setHasTriedStreamFallback] = useState(false);
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(0.25);
+  const [isMuted, setIsMuted] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [resolveProgress, setResolveProgress] = useState(0);
   const [trackTitle, setTrackTitle] = useState<string | null>(null);
@@ -200,6 +201,9 @@ const AudioProcessor: React.FC = () => {
   const attachAudioListeners = () => {
     const audio = audioRef.current;
     if (!audio) return;
+    
+    // Set initial volume
+    audio.volume = isMuted ? 0 : volume;
     const onLoaded = () => {
       const elDuration = isFinite(audio.duration) ? audio.duration : 0;
       setDuration((prev) => (prev > 0 ? prev : elDuration));
@@ -379,6 +383,25 @@ const AudioProcessor: React.FC = () => {
     setVolume(clamped);
     if (audioRef.current) {
       audioRef.current.volume = clamped;
+    }
+    // Unmute when volume is changed (if it's not 0)
+    if (isMuted && clamped > 0) {
+      setIsMuted(false);
+    }
+  };
+
+  const toggleMute = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    if (isMuted) {
+      // Unmute - restore previous volume
+      audio.volume = volume;
+      setIsMuted(false);
+    } else {
+      // Mute - set volume to 0
+      audio.volume = 0;
+      setIsMuted(true);
     }
   };
 
@@ -651,41 +674,70 @@ const AudioProcessor: React.FC = () => {
 
                 {/* Volume */}
                 <div className="flex items-center gap-2 w-40">
-                  <svg className={`w-5 h-5 ${isProcessing && !audioFetched ? 'text-gray-500' : 'text-gray-300'}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    {/* Speaker base */}
-                    <path d="M5 9v6h4l5 4V5L9 9H5z"/>
-                    {/* Curvy volume level waves */}
-                    {volume > 0 && (
-                      <path 
-                        d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
-                        className="opacity-60"
-                      />
-                    )}
-                    {volume > 0.3 && (
-                      <path 
-                        d="M17 8c0-1.1.9-2 2-2s2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V8z" 
-                        className="opacity-70"
-                      />
-                    )}
-                    {volume > 0.6 && (
-                      <path 
-                        d="M18 6c0-1.1.9-2 2-2s2 .9 2 2v12c0 1.1-.9 2-2 2s-2-.9-2-2V6z" 
-                        className="opacity-80"
-                      />
-                    )}
-                    {volume > 0.8 && (
-                      <path 
-                        d="M19 4c0-1.1.9-2 2-2s2 .9 2 2v16c0 1.1-.9 2-2 2s-2-.9-2-2V4z" 
-                        className="opacity-90"
-                      />
-                    )}
-                  </svg>
+                  <button 
+                    onClick={toggleMute}
+                    disabled={isProcessing && !audioFetched}
+                    className={`p-1 rounded transition-colors ${
+                      isProcessing && !audioFetched 
+                        ? 'cursor-not-allowed opacity-50' 
+                        : 'hover:bg-gray-700'
+                    }`}
+                    aria-label={isMuted ? "Unmute" : "Mute"}
+                  >
+                    <svg className={`w-5 h-5 ${isProcessing && !audioFetched ? 'text-gray-500' : 'text-gray-300'}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      {/* Speaker base */}
+                      <path d="M5 9v6h4l5 4V5L9 9H5z"/>
+                      {/* Curvy volume level waves */}
+                      {!isMuted && volume > 0 && (
+                        <path 
+                          d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
+                          className="opacity-60"
+                        />
+                      )}
+                      {!isMuted && volume > 0.3 && (
+                        <path 
+                          d="M17 8c0-1.1.9-2 2-2s2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V8z" 
+                          className="opacity-70"
+                        />
+                      )}
+                      {!isMuted && volume > 0.6 && (
+                        <path 
+                          d="M18 6c0-1.1.9-2 2-2s2 .9 2 2v12c0 1.1-.9 2-2 2s-2-.9-2-2V6z" 
+                          className="opacity-80"
+                        />
+                      )}
+                      {!isMuted && volume > 0.8 && (
+                        <path 
+                          d="M19 4c0-1.1.9-2 2-2s2 .9 2 2v16c0 1.1-.9 2-2 2s-2-.9-2-2V4z" 
+                          className="opacity-90"
+                        />
+                      )}
+                      {/* Mute indicator */}
+                      {isMuted && (
+                        <>
+                          {/* Crossed line */}
+                          <path 
+                            d="M16 8l4 4-4 4V8z" 
+                            className="opacity-60"
+                          />
+                          {/* Diagonal cross */}
+                          <path 
+                            d="M14 6l8 8M22 6l-8 8" 
+                            stroke="currentColor" 
+                            strokeWidth="2" 
+                            fill="none"
+                            className="opacity-80"
+                          />
+                        </>
+                      )}
+                    </svg>
+                  </button>
                   <input
                     type="range"
                     min={0}
                     max={1}
                     step={0.01}
-                    value={volume}
+                    value={isMuted ? 0 : volume}
                     onChange={(e) => handleVolume(parseFloat(e.target.value))}
                     disabled={isProcessing && !audioFetched}
                     className={`w-full ${isProcessing && !audioFetched ? 'opacity-50 cursor-not-allowed' : 'accent-blue-500'}`}

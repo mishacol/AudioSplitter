@@ -16,7 +16,8 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(0.25);
+  const [isMuted, setIsMuted] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [low, setLow] = useState<PeaksJson | null>(null);
   const [high, setHigh] = useState<PeaksJson | null>(null);
@@ -40,6 +41,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     }
   }, [selection]);
 
+  // Set initial volume when audio loads
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.volume = isMuted ? 0 : volume;
+    }
+  }, [audioUrl, volume, isMuted]);
+
   // Audio event handlers
   useEffect(() => {
     const audio = audioRef.current;
@@ -54,16 +63,9 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         const startTime = Math.min(selectionStart, selectionEnd);
         const endTime = Math.max(selectionStart, selectionEnd);
         
-        console.log('Loop check in timeUpdate:', { 
-          currentTime, 
-          startTime, 
-          endTime, 
-          shouldLoop: currentTime >= endTime 
-        });
         
         // If playhead has reached or passed the end of selection, loop back to start
         if (currentTime >= endTime) {
-          console.log('Looping back to start:', startTime);
           audio.currentTime = startTime;
           setCurrentTime(startTime);
         }
@@ -128,6 +130,25 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     if (audioRef.current) {
       audioRef.current.volume = clamped;
     }
+    // Unmute when volume is changed (if it's not 0)
+    if (isMuted && clamped > 0) {
+      setIsMuted(false);
+    }
+  };
+
+  const toggleMute = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    if (isMuted) {
+      // Unmute - restore previous volume
+      audio.volume = volume;
+      setIsMuted(false);
+    } else {
+      // Mute - set volume to 0
+      audio.volume = 0;
+      setIsMuted(true);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -168,15 +189,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   })();
 
   // Debug logging
-  console.log('Duration debug:', {
-    audioDuration: duration,
-    highDuration: durationFromPeaks(high),
-    lowDuration: durationFromPeaks(low),
-    expectedDuration,
-    effectiveDuration,
-    high: high ? { points: high.points, duration: high.duration } : null,
-    low: low ? { points: low.points, duration: low.duration } : null
-  });
 
   // Canvas waveform renderer (peaks + playhead + selection)
   useEffect(() => {
@@ -195,15 +207,8 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const drawPeaks = () => {
-      console.log('drawPeaks called:', { 
-        displayPeaks: displayPeaks ? displayPeaks.length : null,
-        effectiveDuration,
-        width: rect.width,
-        height: cssHeight
-      });
       
       if (!displayPeaks || displayPeaks.length === 0) {
-        console.log('No displayPeaks to draw');
         return;
       }
       const width = rect.width;
@@ -385,12 +390,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const audio = audioRef.current;
     if (!audio || !selectionStart || !selectionEnd) return;
     
-    console.log('Auto-jump check:', { selectionStart, selectionEnd, currentTime });
     
     // Only jump if we have a valid selection and it's not a zero-width selection
     if (selectionStart !== selectionEnd) {
       const startTime = Math.min(selectionStart, selectionEnd);
-      console.log('Auto-jumping playhead to:', startTime);
       audio.currentTime = startTime;
       setCurrentTime(startTime);
     }
@@ -399,7 +402,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   // Monitor playhead position for loop mode
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !selectionStart || !selectionEnd || selectionStart === selectionEnd) {
+    if (!audio || selectionStart === null || selectionEnd === null || selectionStart === selectionEnd) {
       setIsLoopMode(false);
       return;
     }
@@ -410,21 +413,12 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     // Check if playhead is inside selection
     const isInsideSelection = currentTime >= startTime && currentTime <= endTime;
     
-    console.log('Loop mode check:', { 
-      currentTime, 
-      startTime, 
-      endTime, 
-      isInsideSelection, 
-      isLoopMode 
-    });
     
     if (isInsideSelection && !isLoopMode) {
       // Entered selection - enable loop mode
-      console.log('Entering loop mode');
       setIsLoopMode(true);
     } else if (!isInsideSelection && isLoopMode) {
       // Exited selection - disable loop mode
-      console.log('Exiting loop mode');
       setIsLoopMode(false);
     }
   }, [currentTime, selectionStart, selectionEnd, isLoopMode]);
@@ -683,41 +677,65 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
 
         {/* Volume */}
         <div className="flex items-center gap-2 w-40">
-          <svg className="w-5 h-5 text-gray-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            {/* Speaker base */}
-            <path d="M5 9v6h4l5 4V5L9 9H5z"/>
-            {/* Curvy volume level waves */}
-            {volume > 0 && (
-              <path 
-                d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
-                className="opacity-60"
-              />
-            )}
-            {volume > 0.3 && (
-              <path 
-                d="M17 8c0-1.1.9-2 2-2s2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V8z" 
-                className="opacity-70"
-              />
-            )}
-            {volume > 0.6 && (
-              <path 
-                d="M18 6c0-1.1.9-2 2-2s2 .9 2 2v12c0 1.1-.9 2-2 2s-2-.9-2-2V6z" 
-                className="opacity-80"
-              />
-            )}
-            {volume > 0.8 && (
-              <path 
-                d="M19 4c0-1.1.9-2 2-2s2 .9 2 2v16c0 1.1-.9 2-2 2s-2-.9-2-2V4z" 
-                className="opacity-90"
-              />
-            )}
-          </svg>
+          <button 
+            onClick={toggleMute}
+            className="p-1 rounded hover:bg-gray-700 transition-colors"
+            aria-label={isMuted ? "Unmute" : "Mute"}
+          >
+            <svg className="w-5 h-5 text-gray-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              {/* Speaker base */}
+              <path d="M5 9v6h4l5 4V5L9 9H5z"/>
+              {/* Curvy volume level waves */}
+              {!isMuted && volume > 0 && (
+                <path 
+                  d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
+                  className="opacity-60"
+                />
+              )}
+              {!isMuted && volume > 0.3 && (
+                <path 
+                  d="M17 8c0-1.1.9-2 2-2s2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V8z" 
+                  className="opacity-70"
+                />
+              )}
+              {!isMuted && volume > 0.6 && (
+                <path 
+                  d="M18 6c0-1.1.9-2 2-2s2 .9 2 2v12c0 1.1-.9 2-2 2s-2-.9-2-2V6z" 
+                  className="opacity-80"
+                />
+              )}
+              {!isMuted && volume > 0.8 && (
+                <path 
+                  d="M19 4c0-1.1.9-2 2-2s2 .9 2 2v16c0 1.1-.9 2-2 2s-2-.9-2-2V4z" 
+                  className="opacity-90"
+                />
+              )}
+              {/* Mute indicator */}
+              {isMuted && (
+                <>
+                  {/* Crossed line */}
+                  <path 
+                    d="M16 8l4 4-4 4V8z" 
+                    className="opacity-60"
+                  />
+                  {/* Diagonal cross */}
+                  <path 
+                    d="M14 6l8 8M22 6l-8 8" 
+                    stroke="currentColor" 
+                    strokeWidth="2" 
+                    fill="none"
+                    className="opacity-80"
+                  />
+                </>
+              )}
+            </svg>
+          </button>
           <input
             type="range"
             min={0}
             max={1}
             step={0.01}
-            value={volume}
+            value={isMuted ? 0 : volume}
             onChange={(e) => handleVolume(parseFloat(e.target.value))}
             className="w-full accent-blue-500"
             aria-label="Volume"

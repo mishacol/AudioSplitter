@@ -93,16 +93,23 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     setEndTimeInput(input);
     const time = parseTimeInput(input);
     if (time !== null) {
+      // Clamp to valid range and show error if user tries to exceed duration
       const clampedTime = Math.max(0, Math.min(time, duration));
+      if (time > duration) {
+        setTimeError(`End time cannot exceed track duration (${formatTime(duration)})`);
+      } else {
+        setTimeError(null);
+      }
       setSelectionEnd(clampedTime);
       
       // Validate with current start time
       const error = validateTimes(selectionStart, clampedTime);
-      setTimeError(error);
+      if (error) setTimeError(error);
     } else if (input.trim() === '') {
       setSelectionEnd(duration);
+      setTimeError(null);
       const error = validateTimes(selectionStart, duration);
-      setTimeError(error);
+      if (error) setTimeError(error);
     }
   };
 
