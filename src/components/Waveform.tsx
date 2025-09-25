@@ -25,6 +25,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
 
+  // Sync selection prop to internal state
+  useEffect(() => {
+    if (selection) {
+      setSelectionStart(selection.start);
+      setSelectionEnd(selection.end);
+    }
+  }, [selection]);
+
   // Audio event handlers
   useEffect(() => {
     const audio = audioRef.current;
