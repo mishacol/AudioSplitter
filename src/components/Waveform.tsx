@@ -302,22 +302,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           const rightGripX = right - gripWidth/2;
           ctx.fillRect(rightGripX, gripY, gripWidth, gripHeight);
           
-          // Draw double arrows on hover
-          if (isLeftHovered || isLeftDragging) {
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('⟷', left, h/2);
-          }
-          
-          if (isRightHovered || isRightDragging) {
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('⟷', right, h/2);
-          }
         }
       }
 
@@ -337,13 +321,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
           
           // Add loop indicator when in loop mode
-          if (isLoopMode) {
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = '10px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText('↻', x, 5);
-          }
         }
       }
 
@@ -468,8 +445,12 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     }
   }, [currentTime, isPlaying, autoScrollEnabled, zoomLevel, effectiveDuration, zoomCenter]);
 
-  // Zoom to selection when selection is created
+  // Zoom to selection when selection is created (DISABLED - too confusing when adjusting handles)
   useEffect(() => {
+    // Disabled automatic zoom-to-selection to prevent confusion when adjusting handles
+    // Users can manually zoom using mouse wheel if they want to focus on selection
+    return;
+    
     if (!selectionStart || !selectionEnd || selectionStart === selectionEnd) return;
     
     const selectionDuration = Math.abs(selectionEnd - selectionStart);
@@ -507,7 +488,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
 
     // Check which handle is being clicked (if any)
     const getHandleAt = (clientX: number): 'leftHandle' | 'rightHandle' | null => {
-      if (!selectionStart || !selectionEnd || selectionStart === selectionEnd) return null;
+      if (selectionStart === null || selectionEnd === null || selectionStart === selectionEnd) return null;
       
       const rect = canvas.getBoundingClientRect();
       const mouseX = clientX - rect.left;
@@ -657,7 +638,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     <div className="space-y-4">
       {/* Canvas waveform placeholder */}
       <div className="bg-transparent rounded p-2 select-none">
-        <canvas ref={canvasRef} style={{ width: '100%', height: 150 }} />
+        <canvas 
+          ref={canvasRef} 
+          style={{ 
+            width: '100%', 
+            height: 150,
+            cursor: hoveredHandle ? 'ew-resize' : 'default'
+          }} 
+        />
       </div>
       
       {/* Custom Player Controls */}
