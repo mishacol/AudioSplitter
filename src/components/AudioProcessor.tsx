@@ -788,7 +788,7 @@ const AudioProcessor: React.FC = () => {
                   <div className="space-y-4">
                     <div className="text-center">
                       <p className="text-gray-300 text-sm mb-4">
-                        Use yellow frame to create regions and import your selections
+                        Click and drag on the waveform to create a selection, or leave empty to export the full track. Use the Export Selection button to save your audio with a custom filename and location.
                       </p>
                     </div>
                     

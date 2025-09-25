@@ -227,14 +227,13 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           setLow(lowData);
           if (lowData) console.log('Low peaks loaded:', { points: lowData.points, duration: lowData.duration });
         }
-        if (lowData && !cancelled) {
-          onWaveformReady?.();
-        }
         // kick off high-res fetch but don't block UI
         peaksService.waitForHigh(job.job_id).then((h) => {
           if (!cancelled) {
             setHigh(h);
             if (h) console.log('High peaks loaded:', { points: h.points, duration: h.duration });
+            // Call onWaveformReady when high-res peaks are loaded
+            onWaveformReady?.();
           }
         });
       } catch (e) {
