@@ -52,12 +52,18 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     return null;
   };
 
-  // Validate time inputs
+  // Validate time inputs (only critical errors)
   const validateTimes = (start: number, end: number): string | null => {
     if (start < 0 || end < 0) return "Time cannot be negative";
     if (start > duration || end > duration) return "Time cannot exceed track duration";
-    if (end <= start) return "End time must be greater than start time";
+    if (end < start) return "End time must be greater than start time";
+    // Note: We don't validate zero-duration here - that's handled by the note and disabled button
     return null;
+  };
+
+  // Check if selection is valid for export
+  const isSelectionValidForExport = (start: number, end: number): boolean => {
+    return end > start && start >= 0 && end <= duration;
   };
 
   // Handle start time change
@@ -105,8 +111,26 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
     setEndTimeInput(formatTime(selectionEnd));
   }, [selectionEnd]);
 
+  // Validate selection whenever it changes
+  useEffect(() => {
+    const error = validateTimes(selectionStart, selectionEnd);
+    setTimeError(error);
+  }, [selectionStart, selectionEnd, duration]);
+
   // Export functionality
   const handleExport = () => {
+    // Validate selection before export
+    const error = validateTimes(selectionStart, selectionEnd);
+    if (error) {
+      setTimeError(error);
+      return; // Don't export if there's an error
+    }
+    
+    // Check if selection is valid for export
+    if (!isSelectionValidForExport(selectionStart, selectionEnd)) {
+      return; // Don't export if selection is invalid
+    }
+    
     onExport(selectionStart, selectionEnd, format);
   };
 
@@ -172,6 +196,11 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
             <p className="text-gray-400 text-sm">
               Selected area duration: {formatTime(selectionEnd - selectionStart)}
             </p>
+            {!isSelectionValidForExport(selectionStart, selectionEnd) && (
+              <p className="text-gray-500 text-xs mt-1">
+                Selection must be longer than 0:00
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <select
@@ -185,7 +214,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
             </select>
             <Button
               onClick={handleExport}
-              disabled={!!timeError}
+              disabled={!!timeError || !isSelectionValidForExport(selectionStart, selectionEnd)}
               className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="h-4 w-4 mr-2" />

@@ -232,12 +232,12 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         
         // Only draw selection if it's visible in current zoom window
         if (right >= 0 && left <= w) {
-          // Blue selection overlay
-          ctx.fillStyle = 'rgba(59, 130, 246, 0.3)'; // Blue overlay
+          // Bright orange selection overlay
+          ctx.fillStyle = 'rgba(255, 165, 0, 0.3)'; // Bright orange overlay
           ctx.fillRect(left, 0, right - left, h);
           
-          // Grey boundary markers
-          ctx.fillStyle = '#6B7280'; // Grey color
+          // Bright orange boundary markers
+          ctx.fillStyle = '#FFA500'; // Bright orange color
           ctx.fillRect(left - 1, 0, 2, h);
           ctx.fillRect(right - 1, 0, 2, h);
         }
