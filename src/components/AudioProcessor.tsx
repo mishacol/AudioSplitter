@@ -8,6 +8,28 @@ import { toast } from '@/components/ui/use-toast';
 import ManualSplitEditor from './ManualSplitEditor';
 import { AudioService } from '@/services';
 
+// TypeScript declarations for File System Access API
+declare global {
+  interface Window {
+    showSaveFilePicker?: (options?: {
+      suggestedName?: string;
+      types?: Array<{
+        description: string;
+        accept: Record<string, string[]>;
+      }>;
+    }) => Promise<FileSystemFileHandle>;
+  }
+  
+  interface FileSystemFileHandle {
+    createWritable(): Promise<FileSystemWritableFileStream>;
+  }
+  
+  interface FileSystemWritableFileStream {
+    write(data: Blob): Promise<void>;
+    close(): Promise<void>;
+  }
+}
+
 const AudioProcessor: React.FC = () => {
   const [audioUrl, setAudioUrl] = useState('');
   const [audioFetched, setAudioFetched] = useState(false);
@@ -781,14 +803,66 @@ const AudioProcessor: React.FC = () => {
                           const endTimeStr = formatTime(endTime).replace(/:/g, '-');
                           const filename = `audio_selection_${startTimeStr}_to_${endTimeStr}.${format}`;
                           
-                          // Call backend to create audio segment in selected format (streaming approach)
+                          // STEP 1: Show save dialog IMMEDIATELY (while user gesture is still active)
+                          let fileHandle = null;
+                          if (typeof window.showSaveFilePicker === 'function') {
+                            console.log('✅ File System Access API is available, showing save dialog immediately...');
+                            try {
+                              const options = {
+                                suggestedName: filename,
+                                types: [{
+                                  description: 'Audio files',
+                                  accept: {
+                                    'audio/mpeg': ['.mp3'],
+                                    'audio/wav': ['.wav'],
+                                    'audio/flac': ['.flac']
+                                  }
+                                }]
+                              };
+                              
+                              console.log('🔍 Calling showSaveFilePicker with options:', options);
+                              
+                              // Open native Windows Explorer save dialog IMMEDIATELY
+                              fileHandle = await window.showSaveFilePicker(options);
+                              console.log('✅ Save dialog opened, user selected file handle:', fileHandle);
+                              
+                              if (!fileHandle) {
+                                console.log('❌ No file handle returned from save dialog');
+                                throw new Error('Save dialog closed or not available');
+                              }
+                              
+                            } catch (err: any) {
+                              console.log('❌ File System Access API error:', err);
+                              console.log('❌ Error name:', err?.name);
+                              console.log('❌ Error message:', err?.message);
+                              
+                              // If user cancelled the dialog, don't treat as an error
+                              const isCancel = err?.name === 'AbortError' || 
+                                             err?.name === 'NotAllowedError' || 
+                                             err?.message?.toLowerCase()?.includes('cancel');
+                              
+                              if (isCancel) {
+                                console.log('✅ User cancelled save dialog, stopping gracefully');
+                                return;
+                              }
+                              
+                              // If other error, continue without file handle (will use fallback)
+                              console.warn('⚠️ File System Access failed, will use fallback download');
+                              fileHandle = null;
+                            }
+                          } else {
+                            console.log('❌ File System Access API not available, will use fallback download');
+                          }
+                          
+                          // STEP 2: Make network request to get audio blob
+                          console.log('🔍 Making network request to get audio blob...');
                           const response = await fetch('http://localhost:3001/split', {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json',
                             },
                             body: JSON.stringify({
-                              url: audioUrl,
+                              url: resolvedAudioUrl || audioUrl,
                               format: format,
                               startTime: startTime,
                               endTime: endTime
@@ -799,26 +873,51 @@ const AudioProcessor: React.FC = () => {
                             throw new Error('Failed to create audio segment');
                           }
                           
-                          // Get the audio blob
+                          // STEP 3: Get the audio blob
                           const audioBlob = await response.blob();
+                          console.log('🔍 Audio blob created:', audioBlob.size, 'bytes, type:', audioBlob.type);
                           
-                          // Create file save dialog
-                          const link = document.createElement('a');
-                          link.href = URL.createObjectURL(audioBlob);
-                          link.download = filename;
-                          link.style.display = 'none';
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
-                          
-                          // Clean up the blob URL
-                          URL.revokeObjectURL(link.href);
-                          
-                          toast({ 
-                            title: '💾 File Saved!', 
-                            description: `Audio segment saved as ${filename}`,
-                            className: 'bg-blue-900 border-blue-700 text-blue-100'
-                          });
+                          // STEP 4: Save the file using the chosen method
+                          if (fileHandle) {
+                            console.log('🔍 Using File System Access API to save file...');
+                            try {
+                              const writable = await fileHandle.createWritable();
+                              console.log('✅ Writable stream created, writing blob...');
+                              
+                              await writable.write(audioBlob);
+                              console.log('✅ Blob written to file, closing stream...');
+                              
+                              await writable.close();
+                              console.log('✅ File save completed successfully!');
+                              
+                              toast({ 
+                                title: '💾 File Saved!', 
+                                description: `Audio segment saved to chosen location`,
+                                className: 'bg-blue-900 border-blue-700 text-blue-100'
+                              });
+                            } catch (err: any) {
+                              console.error('❌ Error writing to file handle:', err);
+                              throw err;
+                            }
+                          } else {
+                            console.log('🔍 Using fallback download method...');
+                            // Fallback to classic download
+                            const url = URL.createObjectURL(audioBlob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = filename;
+                            link.style.display = 'none';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
+                            
+                            toast({ 
+                              title: '📥 Download Started', 
+                              description: `Audio segment downloading to your Downloads folder`,
+                              className: 'bg-blue-900 border-blue-700 text-blue-100'
+                            });
+                          }
                         } catch (error) {
                           console.error('Error saving file:', error);
                           setShowErrorPopup(true);
