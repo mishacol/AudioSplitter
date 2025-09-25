@@ -46,7 +46,12 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const handleDurationChange = () => setDuration(audio.duration || 0);
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
-    const handleEnded = () => setIsPlaying(false);
+    const handleEnded = () => {
+      setIsPlaying(false);
+      // Reset playhead to beginning when track ends
+      audio.currentTime = 0;
+      setCurrentTime(0);
+    };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('durationchange', handleDurationChange);
@@ -71,7 +76,11 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     if (isPlaying) {
       audio.pause();
     } else {
-      // Do not alter currentTime on play; just start playback
+      // If playhead is at the end, reset to beginning before playing
+      if (audio.currentTime >= audio.duration - 0.1) {
+        audio.currentTime = 0;
+        setCurrentTime(0);
+      }
       audio.play().catch(console.error);
     }
   };
@@ -400,8 +409,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     };
 
     const onUp = (e: MouseEvent) => {
-      if (!isDragging) return;
-      
+      // Always handle mouse up, regardless of dragging state
       setIsDragging(false);
       
       // If it was a click (not a drag), seek to that position
