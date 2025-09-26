@@ -151,7 +151,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       <div className="bg-transparent rounded-lg p-6">
         {!isWaveformReady && (
           <div className="flex items-center space-x-3 mb-4">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
             <span className="text-white text-sm">Generating your waveform... This may take a few seconds to a couple of minutes, depending on the audio file size. Please wait for a better visualization!</span>
           </div>
         )}
@@ -226,7 +226,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
             <Button
               onClick={handleExport}
               disabled={!!timeError || !isSelectionValidForExport(selectionStart, selectionEnd)}
-              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="h-4 w-4 mr-2" />
               Export Selection

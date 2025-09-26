@@ -510,7 +510,7 @@ const AudioProcessor: React.FC = () => {
                   </div>
                   <div className="w-full bg-gray-700 rounded-full h-2">
                     <div 
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300 ease-out"
+                      className="bg-gradient-to-r from-gray-600 to-gray-800 h-2 rounded-full transition-all duration-300 ease-out"
                       style={{ width: `${resolveProgress}%` }}
                     ></div>
                   </div>
@@ -633,10 +633,10 @@ const AudioProcessor: React.FC = () => {
                 <button
                   onClick={togglePlay}
                   disabled={(isProcessing && !audioFetched) || audioLoading}
-                  className={`rounded-full p-4 transition-colors duration-300 ${
+                  className={`transition-colors duration-300 ${
                     (isProcessing && !audioFetched) || audioLoading
-                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                      : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white'
+                      ? 'text-gray-400 cursor-not-allowed' 
+                      : 'text-gray-300 hover:text-white'
                   }`}
                 >
                   {(isProcessing && !audioFetched) || audioLoading ? (
@@ -662,7 +662,7 @@ const AudioProcessor: React.FC = () => {
                     onClick={isProcessing && !audioFetched ? undefined : handleSeek}
                   >
                     <div 
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      className="bg-gray-600 h-2 rounded-full transition-all duration-300"
                       style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
                     />
                   </div>
@@ -677,10 +677,10 @@ const AudioProcessor: React.FC = () => {
                   <button 
                     onClick={toggleMute}
                     disabled={isProcessing && !audioFetched}
-                    className={`p-1 rounded transition-colors ${
+                    className={`transition-colors ${
                       isProcessing && !audioFetched 
                         ? 'cursor-not-allowed opacity-50' 
-                        : 'hover:bg-gray-700'
+                        : 'hover:opacity-80'
                     }`}
                     aria-label={isMuted ? "Unmute" : "Mute"}
                   >
@@ -740,7 +740,7 @@ const AudioProcessor: React.FC = () => {
                     value={isMuted ? 0 : volume}
                     onChange={(e) => handleVolume(parseFloat(e.target.value))}
                     disabled={isProcessing && !audioFetched}
-                    className={`w-full ${isProcessing && !audioFetched ? 'opacity-50 cursor-not-allowed' : 'accent-blue-500'}`}
+                    className={`w-full ${isProcessing && !audioFetched ? 'opacity-50 cursor-not-allowed' : 'accent-gray-600'}`}
                     aria-label="Volume"
                   />
                 </div>
@@ -776,7 +776,7 @@ const AudioProcessor: React.FC = () => {
                     setIsResolving(false);
                     setResolveProgress(0);
                   }}
-                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg"
+                  className="bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg"
                 >
                   Fetch New Track
                 </button>
@@ -801,7 +801,7 @@ const AudioProcessor: React.FC = () => {
                     }}
                     className={`flex items-center gap-2 ${
                       splitMode === 'automatic' 
-                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700' 
+                        ? 'bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800' 
                         : ''
                     }`}
                   >
@@ -816,7 +816,7 @@ const AudioProcessor: React.FC = () => {
                     }}
                     className={`flex items-center gap-2 ${
                       splitMode === 'manual' 
-                        ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
+                        ? 'bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800'
                         : ''
                     }`}
                   >
@@ -945,7 +945,7 @@ const AudioProcessor: React.FC = () => {
                               toast({ 
                                 title: '💾 File Saved!', 
                                 description: `Audio segment saved to chosen location`,
-                                className: 'bg-blue-900 border-blue-700 text-blue-100'
+                                className: 'bg-gray-900 border-gray-700 text-gray-100'
                               });
                             } catch (err: any) {
                               console.error('❌ Error writing to file handle:', err);
@@ -967,7 +967,7 @@ const AudioProcessor: React.FC = () => {
                             toast({ 
                               title: '📥 Download Started', 
                               description: `Audio segment downloading to your Downloads folder`,
-                              className: 'bg-blue-900 border-blue-700 text-blue-100'
+                              className: 'bg-gray-900 border-gray-700 text-gray-100'
                             });
                           }
                         } catch (error) {
@@ -988,7 +988,7 @@ const AudioProcessor: React.FC = () => {
                     <Button
                       onClick={handleSplitAudio}
                       disabled={isProcessing}
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                      className="bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800"
                     >
                       {isProcessing ? (
                         <>

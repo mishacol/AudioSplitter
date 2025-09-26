@@ -186,10 +186,12 @@ def generate_low_then_high(job: JobStatus) -> None:
 
 app = Flask(__name__)
 CORS(app, origins=[
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:8080",
+    "http://localhost:3000",  # Primary frontend port
+    "http://localhost:3001",  # Audio streaming port
+    "http://localhost:8080",  # Fallback ports
     "http://localhost:8081",
+    "http://localhost:8082",
+    "http://localhost:8083",
 ], supports_credentials=True)
 
 

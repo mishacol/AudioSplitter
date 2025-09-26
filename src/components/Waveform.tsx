@@ -646,7 +646,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       <div className="flex items-center justify-between gap-4 bg-gray-800 rounded-lg p-4">
         <button
           onClick={togglePlayPause}
-          className="rounded-full p-4 transition-colors duration-300 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+          className="transition-colors duration-300 text-gray-300 hover:text-white"
         >
           {isPlaying ? (
             <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -665,7 +665,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
             onClick={handleSeek}
           >
             <div 
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              className="bg-gray-600 h-2 rounded-full transition-all duration-300"
               style={{ width: `${effectiveDuration ? (currentTime / effectiveDuration) * 100 : 0}%` }}
             />
           </div>
@@ -679,7 +679,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         <div className="flex items-center gap-2 w-40">
           <button 
             onClick={toggleMute}
-            className="p-1 rounded hover:bg-gray-700 transition-colors"
+            className="transition-colors hover:opacity-80"
             aria-label={isMuted ? "Unmute" : "Mute"}
           >
             <svg className="w-5 h-5 text-gray-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -737,7 +737,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
             step={0.01}
             value={isMuted ? 0 : volume}
             onChange={(e) => handleVolume(parseFloat(e.target.value))}
-            className="w-full accent-blue-500"
+            className="w-full accent-gray-600"
             aria-label="Volume"
           />
         </div>
