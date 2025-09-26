@@ -25,6 +25,11 @@ export const useAudioPlayer = ({ audioUrl, onTimeUpdate, onEnded }: UseAudioPlay
     };
 
     const handleEnded = () => {
+      console.log('useAudioPlayer handleEnded fired:', {
+        currentTime: audioRef.current?.currentTime,
+        duration: audioRef.current?.duration,
+        isPlaying
+      });
       setIsPlaying(false);
       onEnded?.();
     };

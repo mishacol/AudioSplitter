@@ -58,24 +58,78 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       const currentTime = audio.currentTime;
       setCurrentTime(currentTime);
       
-      // Check if we're in loop mode and playhead has reached the end of selection
-      if (isLoopMode && selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd) {
+      // Guard against floating-point precision - clamp to selection bounds
+      if (selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd) {
         const startTime = Math.min(selectionStart, selectionEnd);
         const endTime = Math.max(selectionStart, selectionEnd);
+
+        // Check if we're near the end of the track (within 0.1 seconds)
+        const isNearTrackEnd = audio.duration && (audio.duration - currentTime) < 0.1;
         
-        // If playhead has reached or passed the end of selection, loop back to start
-        if (currentTime >= endTime) {
+        if (currentTime >= endTime || isNearTrackEnd) {
+          console.log('handleTimeUpdate: Looping back to selection start:', {
+            currentTime,
+            endTime,
+            startTime,
+            isNearTrackEnd,
+            trackDuration: audio.duration
+          });
           audio.currentTime = startTime;
           setCurrentTime(startTime);
+          audio.play();
         }
       }
     };
     const handleDurationChange = () => setDuration(audio.duration || 0);
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      console.log('handlePlay called:', {
+        hasAudio: !!audio,
+        selectionStart,
+        selectionEnd,
+        hasValidSelection: selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd
+      });
+      
+      if (!audio) return;
+
+      if (selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd) {
+        const startTime = Math.min(selectionStart, selectionEnd);
+        console.log('Starting playback at selection start:', startTime);
+        audio.currentTime = startTime;   // start at selection
+        setCurrentTime(startTime);
+      } else {
+        console.log('Starting playback from current position (no selection)');
+        // Don't reset to 0:00 - resume from current position
+        // audio.currentTime is already at the correct position
+      }
+
+      audio.play();
+      setIsPlaying(true);
+    };
     const handlePause = () => setIsPlaying(false);
     const handleEnded = () => {
+      console.log('Waveform handleEnded fired:', {
+        isLoopMode,
+        selectionStart,
+        selectionEnd,
+        currentTime: audio.currentTime,
+        duration: audio.duration,
+        hasValidSelection: selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd
+      });
+      
+      const hasSelection = selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd;
+
+      if (hasSelection) {
+        const startTime = Math.min(selectionStart, selectionEnd);
+        console.log('Waveform handleEnded: Looping back to selection start:', startTime);
+        audio.currentTime = startTime;
+        setCurrentTime(startTime);
+        audio.play();
+        return;
+      }
+
+      console.log('Waveform handleEnded: No selection, stopping playback');
+      // No selection → normal behavior
       setIsPlaying(false);
-      // Reset playhead to beginning when track ends
       audio.currentTime = 0;
       setCurrentTime(0);
     };
@@ -98,13 +152,25 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   // Player functions
   const togglePlayPause = () => {
     const audio = audioRef.current;
+    console.log('togglePlayPause called:', {
+      hasAudio: !!audio,
+      isPlaying,
+      currentTime: audio?.currentTime,
+      duration: audio?.duration,
+      selectionStart,
+      selectionEnd
+    });
+    
     if (!audio) return;
     
     if (isPlaying) {
+      console.log('Pausing playback');
       audio.pause();
     } else {
+      console.log('Starting playback');
       // If playhead is at the end, reset to beginning before playing
       if (audio.currentTime >= audio.duration - 0.1) {
+        console.log('Playhead at end, resetting to 0');
         audio.currentTime = 0;
         setCurrentTime(0);
       }
@@ -404,6 +470,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || selectionStart === null || selectionEnd === null || selectionStart === selectionEnd) {
+      console.log('Loop mode disabled - no valid selection:', { selectionStart, selectionEnd });
       setIsLoopMode(false);
       return;
     }
@@ -411,14 +478,32 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const startTime = Math.min(selectionStart, selectionEnd);
     const endTime = Math.max(selectionStart, selectionEnd);
     
-    // Check if playhead is inside selection
-    const isInsideSelection = currentTime >= startTime && currentTime <= endTime;
+    // Check if playhead is inside selection (with tolerance for floating-point precision)
+    const tolerance = 0.001; // 1ms tolerance
+    const isInsideSelection = currentTime >= (startTime - tolerance) && currentTime <= (endTime + tolerance);
+    
+    console.log('Loop mode check:', {
+      currentTime,
+      startTime,
+      endTime,
+      isInsideSelection,
+      isLoopMode,
+      selectionStart,
+      selectionEnd,
+      tolerance,
+      currentTimeMinusTolerance: currentTime - tolerance,
+      currentTimePlusTolerance: currentTime + tolerance,
+      startTimeMinusTolerance: startTime - tolerance,
+      endTimePlusTolerance: endTime + tolerance
+    });
     
     if (isInsideSelection && !isLoopMode) {
       // Entered selection - enable loop mode
+      console.log('Enabling loop mode');
       setIsLoopMode(true);
     } else if (!isInsideSelection && isLoopMode) {
       // Exited selection - disable loop mode
+      console.log('Disabling loop mode');
       setIsLoopMode(false);
     }
   }, [currentTime, selectionStart, selectionEnd, isLoopMode]);

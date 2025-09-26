@@ -212,6 +212,11 @@ const AudioProcessor: React.FC = () => {
     };
     const onTime = () => setCurrentTime(audio.currentTime);
     const onEnded = () => {
+      console.log('AudioProcessor onEnded fired:', {
+        currentTime: audioRef.current?.currentTime,
+        duration: audioRef.current?.duration,
+        isPlaying
+      });
       setIsPlaying(false);
       // Don't reset audio position - let user control it
     };
