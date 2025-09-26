@@ -213,11 +213,7 @@ const AudioProcessor: React.FC = () => {
     const onTime = () => setCurrentTime(audio.currentTime);
     const onEnded = () => {
       setIsPlaying(false);
-      // Reset playhead to beginning when track ends
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        setCurrentTime(0);
-      }
+      // Don't reset audio position - let user control it
     };
     const onError = async () => {
       // Try proxy fallback once if it's a streaming URL

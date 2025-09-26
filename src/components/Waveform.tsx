@@ -63,7 +63,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         const startTime = Math.min(selectionStart, selectionEnd);
         const endTime = Math.max(selectionStart, selectionEnd);
         
-        
         // If playhead has reached or passed the end of selection, loop back to start
         if (currentTime >= endTime) {
           audio.currentTime = startTime;
@@ -79,10 +78,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       // Reset playhead to beginning when track ends
       audio.currentTime = 0;
       setCurrentTime(0);
-      // Force a re-render to ensure button state updates
-      setTimeout(() => {
-        setCurrentTime(0);
-      }, 0);
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -192,8 +187,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     return 0;
   })();
 
-  // Debug logging
-
   // Canvas waveform renderer (peaks + playhead + selection)
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -211,7 +204,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const drawPeaks = () => {
-      
       if (!displayPeaks || displayPeaks.length === 0) {
         return;
       }
@@ -220,9 +212,9 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       const midY = height / 2;
       const pixels = Math.max(1, Math.floor(width));
       
-      // Professional purple waveform like in the screenshot
-      ctx.fillStyle = '#8B5CF6'; // Purple color
-      ctx.strokeStyle = '#8B5CF6';
+      // Professional black waveform for minimalist design
+      ctx.fillStyle = '#000000'; // Black color
+      ctx.strokeStyle = '#000000';
       ctx.lineWidth = 1;
       
       // Calculate zoom parameters
@@ -254,14 +246,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       const w = rect.width;
       const h = cssHeight;
       
-      // White background like in screenshot
-      ctx.fillStyle = '#FFFFFF';
+      // Light gray background for unselected area
+      ctx.fillStyle = '#F5F5F5'; // Light gray
       ctx.fillRect(0, 0, w, h);
       
       // waveform
       drawPeaks();
 
-      // selection overlay (blue like in screenshot)
+      // selection overlay with new color scheme
       if (selectionStart != null && selectionEnd != null && effectiveDuration > 0) {
         // Calculate zoom parameters for selection rendering
         const centerTime = zoomCenter || effectiveDuration / 2;
@@ -277,24 +269,29 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         
         // Only draw selection if it's visible in current zoom window
         if (right >= 0 && left <= w) {
-          // Bright orange selection overlay
-          ctx.fillStyle = 'rgba(255, 165, 0, 0.3)'; // Bright orange overlay
+          // Muted green selection overlay
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.2)'; // Muted green overlay
           ctx.fillRect(left, 0, right - left, h);
           
-          // Enhanced handles with hollow grip design for better drag affordance
-          const handleWidth = 4; // Thinner handles (was 6)
+          // Black selection frame
+          ctx.strokeStyle = '#000000'; // Black frame
+          ctx.lineWidth = 2;
+          ctx.strokeRect(left, 0, right - left, h);
+          
+          // Dark gray handles for adjustments
+          const handleWidth = 4;
           const handleHeight = h;
           
           // Left handle
           const isLeftHovered = hoveredHandle === 'leftHandle';
           const isLeftDragging = dragMode === 'leftHandle';
-          ctx.fillStyle = isLeftHovered || isLeftDragging ? '#FF8C00' : '#FFA500'; // Darker orange when hovered/dragging
+          ctx.fillStyle = isLeftHovered || isLeftDragging ? '#404040' : '#666666'; // Dark gray, darker when hovered/dragging
           ctx.fillRect(left - handleWidth/2, 0, handleWidth, handleHeight);
           
           // Right handle
           const isRightHovered = hoveredHandle === 'rightHandle';
           const isRightDragging = dragMode === 'rightHandle';
-          ctx.fillStyle = isRightHovered || isRightDragging ? '#FF8C00' : '#FFA500'; // Darker orange when hovered/dragging
+          ctx.fillStyle = isRightHovered || isRightDragging ? '#404040' : '#666666'; // Dark gray, darker when hovered/dragging
           ctx.fillRect(right - handleWidth/2, 0, handleWidth, handleHeight);
           
           // Add hollow rectangular grip in the center of each handle
@@ -310,11 +307,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           // Right handle hollow grip
           const rightGripX = right - gripWidth/2;
           ctx.fillRect(rightGripX, gripY, gripWidth, gripHeight);
-          
         }
       }
 
-      // playhead (red like in screenshot)
+      // playhead with new color scheme
       if (effectiveDuration > 0) {
         const centerTime = zoomCenter || effectiveDuration / 2;
         const visibleDuration = effectiveDuration / zoomLevel;
@@ -325,11 +321,13 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         
         // Only draw playhead if it's visible in current zoom window
         if (x >= 0 && x <= w) {
-          // Change playhead color when in loop mode
-          ctx.fillStyle = isLoopMode ? '#10B981' : '#EF4444'; // Green when looping, red normally
-          ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
+          // Check if playhead is inside selection
+          const isInsideSelection = selectionStart != null && selectionEnd != null && 
+            currentTime >= selectionStart && currentTime <= selectionEnd;
           
-          // Add loop indicator when in loop mode
+          // Soft red outside selection, bright green inside selection
+          ctx.fillStyle = isInsideSelection ? '#22C55E' : '#F87171'; // Bright green inside, soft red outside
+          ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
         }
       }
 
@@ -394,7 +392,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const audio = audioRef.current;
     if (!audio || !selectionStart || !selectionEnd) return;
     
-    
     // Only jump if we have a valid selection and it's not a zero-width selection
     if (selectionStart !== selectionEnd) {
       const startTime = Math.min(selectionStart, selectionEnd);
@@ -416,7 +413,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     
     // Check if playhead is inside selection
     const isInsideSelection = currentTime >= startTime && currentTime <= endTime;
-    
     
     if (isInsideSelection && !isLoopMode) {
       // Entered selection - enable loop mode
