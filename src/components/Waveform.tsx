@@ -643,10 +643,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       </div>
       
       {/* Custom Player Controls */}
-      <div className="flex items-center justify-between gap-4 bg-gray-800 rounded-lg p-4">
+      <div className="flex items-center justify-between gap-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
         <button
           onClick={togglePlayPause}
-          className="transition-colors duration-300 text-gray-300 hover:text-white"
+          className="transition-colors duration-300 text-gray-600 hover:text-gray-800 focus:outline-none"
         >
           {isPlaying ? (
             <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -661,17 +661,26 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         
         <div className="flex-1 mx-6">
           <div 
-            className="rounded-full h-2 bg-gray-600 cursor-pointer" 
+            className="rounded-full h-2 bg-gray-200 cursor-pointer relative" 
             onClick={handleSeek}
           >
             <div 
-              className="bg-gray-600 h-2 rounded-full transition-all duration-300"
+              className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
               style={{ width: `${effectiveDuration ? (currentTime / effectiveDuration) * 100 : 0}%` }}
-            />
+            >
+              {/* Slide switch handle */}
+              <div 
+                className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
+                style={{ 
+                  right: '-8px',
+                  transform: 'translateY(-50%)'
+                }}
+              />
+            </div>
           </div>
         </div>
         
-        <span className="text-gray-300 text-sm min-w-[80px] text-right">
+        <span className="text-gray-600 text-sm min-w-[80px] text-right">
           {formatTime(currentTime)} / {formatTime(effectiveDuration)}
         </span>
 
@@ -679,13 +688,13 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         <div className="flex items-center gap-2 w-40">
           <button 
             onClick={toggleMute}
-            className="transition-colors hover:opacity-80"
+            className="transition-colors hover:opacity-80 focus:outline-none"
             aria-label={isMuted ? "Unmute" : "Mute"}
           >
-            <svg className="w-5 h-5 text-gray-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <svg className="w-5 h-5 text-gray-600" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               {/* Speaker base */}
               <path d="M5 9v6h4l5 4V5L9 9H5z"/>
-              {/* Curvy volume level waves */}
+              {/* Curvy volume level waves - only show when not muted and volume > 0 */}
               {!isMuted && volume > 0 && (
                 <path 
                   d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
@@ -710,36 +719,32 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
                   className="opacity-90"
                 />
               )}
-              {/* Mute indicator */}
-              {isMuted && (
-                <>
-                  {/* Crossed line */}
-                  <path 
-                    d="M16 8l4 4-4 4V8z" 
-                    className="opacity-60"
-                  />
-                  {/* Diagonal cross */}
-                  <path 
-                    d="M14 6l8 8M22 6l-8 8" 
-                    stroke="currentColor" 
-                    strokeWidth="2" 
-                    fill="none"
-                    className="opacity-80"
-                  />
-                </>
-              )}
             </svg>
           </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={isMuted ? 0 : volume}
-            onChange={(e) => handleVolume(parseFloat(e.target.value))}
-            className="w-full accent-gray-600"
-            aria-label="Volume"
-          />
+          <div 
+            className="w-full h-2 rounded-full bg-gray-200 cursor-pointer relative"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+              const percentage = clickX / rect.width;
+              const newVolume = Math.max(0, Math.min(1, percentage));
+              handleVolume(newVolume);
+            }}
+          >
+            <div 
+              className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
+              style={{ width: `${(isMuted ? 0 : volume) * 100}%` }}
+            >
+              {/* Slide switch handle */}
+              <div 
+                className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
+                style={{ 
+                  right: '-8px',
+                  transform: 'translateY(-50%)'
+                }}
+              />
+            </div>
+          </div>
         </div>
       </div>
       

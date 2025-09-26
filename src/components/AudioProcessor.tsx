@@ -427,15 +427,15 @@ const AudioProcessor: React.FC = () => {
 
 
   return (
-    <div id="audio-processor" className="bg-gray-900 py-20">
+    <div id="audio-processor" className="bg-gray-50 min-h-screen py-12">
       <div className="container mx-auto px-6">
         <div className="max-w-4xl mx-auto space-y-8">
-          <h2 className="text-4xl font-bold text-white text-center mb-12">
+          <h2 className="text-2xl font-light text-gray-800 text-center mb-8">
             Process Your Audio
           </h2>
 
           {/* URL Input Section */}
-          <Card className="bg-gray-800 border-gray-700">
+          <Card className="bg-white border-0 shadow-lg shadow-gray-200/50 rounded-2xl">
             <CardContent className="p-8">
               <div className="flex items-center justify-center gap-4 mb-6">
                 {[
@@ -467,7 +467,7 @@ const AudioProcessor: React.FC = () => {
                   <Tooltip key={name}>
                     <TooltipTrigger asChild>
                       <div
-                        className={`group inline-flex items-center justify-center rounded-full h-10 w-10 border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all duration-200 text-white/80 hover:text-white hover:-translate-y-0.5 ${showPulse ? 'animate-pulse' : ''}`}
+                        className={`group inline-flex items-center justify-center rounded-full h-10 w-10 border border-gray-200 bg-gray-50 hover:bg-gray-100 hover:border-gray-300 transition-all duration-200 text-gray-600 hover:text-gray-800 hover:-translate-y-0.5 ${showPulse ? 'animate-pulse' : ''}`}
                         aria-label={name}
                         title={name}
                       >
@@ -492,25 +492,25 @@ const AudioProcessor: React.FC = () => {
                     setTimeout(() => setAudioUrl(currentUrl), 10);
                   }
                 }}
-                className="w-full bg-gray-700 border-gray-600 text-white"
+                className="w-full bg-gray-50 border-gray-200 text-gray-800 placeholder-gray-400 focus:border-gray-300 focus:ring-0"
               />
-              <p className="mt-2 text-xs text-gray-400">
-                Note: Use a direct audio URL (e.g., .mp3, .wav). Streaming pages like SoundCloud or YouTube require a downloader proxy.
+              <p className="mt-2 text-xs text-gray-500">
+                Copy and paste the share link from SoundCloud, YouTube, or any audio platform.
               </p>
               
               {/* Track Preparation Progress */}
               {isResolving && (
-                <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                      <span className="text-sm text-gray-300">Fetching track...</span>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400"></div>
+                      <span className="text-sm text-gray-600">Fetching track...</span>
                     </div>
-                    <span className="text-sm text-gray-400">{Math.round(resolveProgress)}%</span>
+                    <span className="text-sm text-gray-500">{Math.round(resolveProgress)}%</span>
                   </div>
-                  <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
-                      className="bg-gradient-to-r from-gray-600 to-gray-800 h-2 rounded-full transition-all duration-300 ease-out"
+                      className="bg-gray-400 h-2 rounded-full transition-all duration-300 ease-out"
                       style={{ width: `${resolveProgress}%` }}
                     ></div>
                   </div>
@@ -542,14 +542,14 @@ const AudioProcessor: React.FC = () => {
 
           {/* Beautiful Preview & Download Section - Shows loading state or after audio is fetched, but hides when split mode is active */}
           {(isProcessing || audioFetched) && !splitMode && audioUrl && (
-            <div className="bg-gray-800 rounded-2xl p-8 border border-gray-700">
-              <h2 className="text-4xl font-bold text-white text-center mb-12">
+            <div className="bg-white rounded-2xl p-8 shadow-lg shadow-gray-200/50 border-0">
+              <h2 className="text-2xl font-light text-gray-800 text-center mb-8">
                 Audio Preview
               </h2>
               
               {/* Track Metadata */}
               {audioFetched && (
-                <div className="mb-8 bg-gray-700/50 rounded-lg p-6">
+                <div className="mb-8 bg-gray-50 rounded-lg p-6 border border-gray-200">
                   {/* Track Image and Metadata Grid */}
                   <div className="flex items-start gap-6">
                     {trackImage && (
@@ -568,30 +568,30 @@ const AudioProcessor: React.FC = () => {
                     {/* Compact metadata grid - optimized layout */}
                     <div className="flex-1 flex flex-wrap gap-4">
                       <div className="flex-1 min-w-0 max-w-xs">
-                        <div className="text-xs text-gray-400 mb-1">Title</div>
-                        <div className="text-white font-medium text-xs break-words" title={trackTitle || 'Unknown Title'}>
+                        <div className="text-xs text-gray-500 mb-1">Title</div>
+                        <div className="text-gray-800 font-medium text-xs break-words" title={trackTitle || 'Unknown Title'}>
                           {trackTitle || 'Unknown Title'}
-                        </div>
-                      </div>
+                </div>
+              </div>
                       
                       <div className="flex-shrink-0">
-                        <div className="text-xs text-gray-400 mb-1">Length</div>
-                        <div className="text-white font-medium text-xs">
+                        <div className="text-xs text-gray-500 mb-1">Length</div>
+                        <div className="text-gray-800 font-medium text-xs">
                           {formatTime(duration)}
                         </div>
                       </div>
                       
                       <div className="flex-shrink-0">
-                        <div className="text-xs text-gray-400 mb-1">Format</div>
-                        <div className="text-white font-medium text-xs">
+                        <div className="text-xs text-gray-500 mb-1">Format</div>
+                        <div className="text-gray-800 font-medium text-xs">
                           {audioFormat ? audioFormat.toUpperCase() : 'Unknown'}
                         </div>
                       </div>
                       
                       {audioBitrate && (
                         <div className="flex-shrink-0">
-                          <div className="text-xs text-gray-400 mb-1">Quality</div>
-                          <div className="text-white font-medium text-xs">
+                          <div className="text-xs text-gray-500 mb-1">Quality</div>
+                          <div className="text-gray-800 font-medium text-xs">
                             {audioBitrate} kbps
                           </div>
                         </div>
@@ -599,8 +599,8 @@ const AudioProcessor: React.FC = () => {
                       
                       {fileSize && (
                         <div className="flex-shrink-0">
-                          <div className="text-xs text-gray-400 mb-1">File Size</div>
-                          <div className="text-white font-medium text-xs">
+                          <div className="text-xs text-gray-500 mb-1">File Size</div>
+                          <div className="text-gray-800 font-medium text-xs">
                             {fileSize}
                           </div>
                         </div>
@@ -608,8 +608,8 @@ const AudioProcessor: React.FC = () => {
                       
                       {metadata?.author && (
                         <div className="flex-shrink-0">
-                          <div className="text-xs text-gray-400 mb-1">Author</div>
-                          <div className="text-white font-medium text-xs">
+                          <div className="text-xs text-gray-500 mb-1">Author</div>
+                          <div className="text-gray-800 font-medium text-xs">
                             {metadata.author}
                           </div>
                         </div>
@@ -617,8 +617,8 @@ const AudioProcessor: React.FC = () => {
                       
                       {metadata?.release_date_formatted && (
                         <div className="flex-shrink-0">
-                          <div className="text-xs text-gray-400 mb-1">Release Date</div>
-                          <div className="text-white font-medium text-xs">
+                          <div className="text-xs text-gray-500 mb-1">Release Date</div>
+                          <div className="text-gray-800 font-medium text-xs">
                             {metadata.release_date_formatted}
                           </div>
                         </div>
@@ -629,14 +629,14 @@ const AudioProcessor: React.FC = () => {
               )}
 
               {/* Player Controls */}
-              <div className="flex items-center justify-between mb-6 gap-4">
+              <div className="flex items-center justify-between mb-6 gap-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
                 <button
                   onClick={togglePlay}
                   disabled={(isProcessing && !audioFetched) || audioLoading}
-                  className={`transition-colors duration-300 ${
+                  className={`transition-colors duration-300 focus:outline-none ${
                     (isProcessing && !audioFetched) || audioLoading
                       ? 'text-gray-400 cursor-not-allowed' 
-                      : 'text-gray-300 hover:text-white'
+                      : 'text-gray-600 hover:text-gray-800'
                   }`}
                 >
                   {(isProcessing && !audioFetched) || audioLoading ? (
@@ -654,21 +654,30 @@ const AudioProcessor: React.FC = () => {
                 
                 <div className="flex-1 mx-6">
                   <div 
-                    className={`rounded-full h-2 ${
+                    className={`rounded-full h-2 relative ${
                       isProcessing && !audioFetched 
-                        ? 'bg-gray-600 cursor-not-allowed' 
-                        : 'bg-gray-600 cursor-pointer'
+                        ? 'bg-gray-200 cursor-not-allowed' 
+                        : 'bg-gray-200 cursor-pointer'
                     }`} 
                     onClick={isProcessing && !audioFetched ? undefined : handleSeek}
                   >
                     <div 
-                      className="bg-gray-600 h-2 rounded-full transition-all duration-300"
+                      className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
                       style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-                    />
+                    >
+                      {/* Slide switch handle */}
+                      <div 
+                        className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
+                        style={{ 
+                          right: '-8px',
+                          transform: 'translateY(-50%)'
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
                 
-                <span className="text-gray-300 text-sm min-w-[80px] text-right">
+                <span className="text-gray-600 text-sm min-w-[80px] text-right">
                   {formatTime(currentTime)} / {formatTime(duration)}
                 </span>
 
@@ -677,72 +686,72 @@ const AudioProcessor: React.FC = () => {
                   <button 
                     onClick={toggleMute}
                     disabled={isProcessing && !audioFetched}
-                    className={`transition-colors ${
+                    className={`transition-colors focus:outline-none ${
                       isProcessing && !audioFetched 
                         ? 'cursor-not-allowed opacity-50' 
                         : 'hover:opacity-80'
                     }`}
                     aria-label={isMuted ? "Unmute" : "Mute"}
                   >
-                    <svg className={`w-5 h-5 ${isProcessing && !audioFetched ? 'text-gray-500' : 'text-gray-300'}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      {/* Speaker base */}
-                      <path d="M5 9v6h4l5 4V5L9 9H5z"/>
-                      {/* Curvy volume level waves */}
+                    <svg className={`w-5 h-5 ${isProcessing && !audioFetched ? 'text-gray-400' : 'text-gray-600'}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    {/* Speaker base */}
+                    <path d="M5 9v6h4l5 4V5L9 9H5z"/>
+                    {/* Curvy volume level waves - only show when not muted and volume > 0 */}
                       {!isMuted && volume > 0 && (
-                        <path 
-                          d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
-                          className="opacity-60"
-                        />
-                      )}
+                      <path 
+                        d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
+                        className="opacity-60"
+                      />
+                    )}
                       {!isMuted && volume > 0.3 && (
-                        <path 
-                          d="M17 8c0-1.1.9-2 2-2s2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V8z" 
-                          className="opacity-70"
-                        />
-                      )}
+                      <path 
+                        d="M17 8c0-1.1.9-2 2-2s2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V8z" 
+                        className="opacity-70"
+                      />
+                    )}
                       {!isMuted && volume > 0.6 && (
-                        <path 
-                          d="M18 6c0-1.1.9-2 2-2s2 .9 2 2v12c0 1.1-.9 2-2 2s-2-.9-2-2V6z" 
-                          className="opacity-80"
-                        />
-                      )}
+                      <path 
+                        d="M18 6c0-1.1.9-2 2-2s2 .9 2 2v12c0 1.1-.9 2-2 2s-2-.9-2-2V6z" 
+                        className="opacity-80"
+                      />
+                    )}
                       {!isMuted && volume > 0.8 && (
-                        <path 
-                          d="M19 4c0-1.1.9-2 2-2s2 .9 2 2v16c0 1.1-.9 2-2 2s-2-.9-2-2V4z" 
-                          className="opacity-90"
-                        />
-                      )}
-                      {/* Mute indicator */}
-                      {isMuted && (
-                        <>
-                          {/* Crossed line */}
-                          <path 
-                            d="M16 8l4 4-4 4V8z" 
-                            className="opacity-60"
-                          />
-                          {/* Diagonal cross */}
-                          <path 
-                            d="M14 6l8 8M22 6l-8 8" 
-                            stroke="currentColor" 
-                            strokeWidth="2" 
-                            fill="none"
-                            className="opacity-80"
-                          />
-                        </>
-                      )}
-                    </svg>
+                      <path 
+                        d="M19 4c0-1.1.9-2 2-2s2 .9 2 2v16c0 1.1-.9 2-2 2s-2-.9-2-2V4z" 
+                        className="opacity-90"
+                      />
+                    )}
+                  </svg>
                   </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={isMuted ? 0 : volume}
-                    onChange={(e) => handleVolume(parseFloat(e.target.value))}
-                    disabled={isProcessing && !audioFetched}
-                    className={`w-full ${isProcessing && !audioFetched ? 'opacity-50 cursor-not-allowed' : 'accent-gray-600'}`}
-                    aria-label="Volume"
-                  />
+                  <div 
+                    className={`w-full h-2 rounded-full relative ${
+                      isProcessing && !audioFetched 
+                        ? 'bg-gray-200 cursor-not-allowed opacity-50' 
+                        : 'bg-gray-200 cursor-pointer'
+                    }`}
+                    onClick={(e) => {
+                      if (isProcessing && !audioFetched) return;
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const clickX = e.clientX - rect.left;
+                      const percentage = clickX / rect.width;
+                      const newVolume = Math.max(0, Math.min(1, percentage));
+                      handleVolume(newVolume);
+                    }}
+                  >
+                    <div 
+                      className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
+                      style={{ width: `${(isMuted ? 0 : volume) * 100}%` }}
+                    >
+                      {/* Slide switch handle */}
+                      <div 
+                        className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
+                        style={{ 
+                          right: '-8px',
+                          transform: 'translateY(-50%)'
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -776,7 +785,7 @@ const AudioProcessor: React.FC = () => {
                     setIsResolving(false);
                     setResolveProgress(0);
                   }}
-                  className="bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-lg"
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm border border-gray-300"
                 >
                   Fetch New Track
                 </button>
@@ -787,42 +796,40 @@ const AudioProcessor: React.FC = () => {
 
           {/* Split Mode Section */}
           {audioFetched && (
-            <Card className="bg-gray-800 border-gray-700">
+            <Card className="bg-white border-0 shadow-lg shadow-gray-200/50 rounded-2xl">
               <CardHeader>
-                <CardTitle className="text-white text-center">Split Mode</CardTitle>
+                <CardTitle className="text-gray-800 text-center font-light">Split Mode</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex gap-4 justify-center">
-                  <Button
-                    variant={splitMode === 'automatic' ? 'default' : 'outline'}
+                  <button
                     onClick={() => {
                       stopPlayback();
                       setSplitMode('automatic');
                     }}
-                    className={`flex items-center gap-2 ${
+                    className={`flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm border border-gray-300 ${
                       splitMode === 'automatic' 
-                        ? 'bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800' 
+                        ? 'bg-gray-300' 
                         : ''
                     }`}
                   >
                     <Wand2 className="h-4 w-4" />
                     Automatic Split
-                  </Button>
-                  <Button
-                    variant={splitMode === 'manual' ? 'default' : 'outline'}
+                  </button>
+                  <button
                     onClick={() => {
                       stopPlayback();
                       setSplitMode('manual');
                     }}
-                    className={`flex items-center gap-2 ${
+                    className={`flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm border border-gray-300 ${
                       splitMode === 'manual' 
-                        ? 'bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800'
+                        ? 'bg-gray-300'
                         : ''
                     }`}
                   >
                     <Scissors className="h-4 w-4" />
                     Manual Split
-                  </Button>
+                  </button>
                   {splitMode && (
                     <Button
                       variant="outline"
@@ -839,7 +846,7 @@ const AudioProcessor: React.FC = () => {
                 {splitMode === 'manual' && (
                   <div className="space-y-4">
                     <div className="text-center">
-                      <p className="text-gray-300 text-sm mb-4">
+                      <p className="text-gray-600 text-sm mb-4">
                         Drag the orange handles on the waveform to create a selection, or select the entire waveform to export the full track.
                       </p>
                     </div>
@@ -850,10 +857,14 @@ const AudioProcessor: React.FC = () => {
                       duration={duration}
                       onExport={async (startTime, endTime, format) => {
                         try {
-                          // Generate filename
-                          const startTimeStr = formatTime(startTime).replace(/:/g, '-');
-                          const endTimeStr = formatTime(endTime).replace(/:/g, '-');
-                          const filename = `audio_selection_${startTimeStr}_to_${endTimeStr}.${format}`;
+                          // Generate filename with original title + timestamp
+                          const now = new Date();
+                          const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19); // 2025-09-26T10-15-30
+                          const sanitizedTitle = (metadata?.title || 'audio_segment')
+                            .replace(/[^a-zA-Z0-9\s-]/g, '') // Remove special characters
+                            .replace(/\s+/g, '_') // Replace spaces with underscores
+                            .substring(0, 50); // Limit length
+                          const filename = `${sanitizedTitle}_${timestamp}.${format}`;
                           
                           // STEP 1: Show save dialog IMMEDIATELY (while user gesture is still active)
                           let fileHandle = null;
@@ -955,16 +966,16 @@ const AudioProcessor: React.FC = () => {
                             console.log('🔍 Using fallback download method...');
                             // Fallback to classic download
                             const url = URL.createObjectURL(audioBlob);
-                            const link = document.createElement('a');
+                          const link = document.createElement('a');
                             link.href = url;
-                            link.download = filename;
-                            link.style.display = 'none';
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
+                          link.download = filename;
+                          link.style.display = 'none';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
                             URL.revokeObjectURL(url);
-                            
-                            toast({ 
+                          
+                          toast({ 
                               title: '📥 Download Started', 
                               description: `Audio segment downloading to your Downloads folder`,
                               className: 'bg-gray-900 border-gray-700 text-gray-100'

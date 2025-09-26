@@ -30,10 +30,11 @@ export const generateAudioFilename = (
     .replace(/\s+/g, '_') // Replace spaces with underscores
     .substring(0, 50); // Limit length
   
-  const startStr = formatTimeForFilename(startTime);
-  const endStr = formatTimeForFilename(endTime);
+  // Generate timestamp for uniqueness
+  const now = new Date();
+  const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19); // 2025-09-26T10-15-30
   
-  return `${sanitizedTitle}_${startStr}_to_${endStr}.${format}`;
+  return `${sanitizedTitle}_${timestamp}.${format}`;
 };
 
 /**

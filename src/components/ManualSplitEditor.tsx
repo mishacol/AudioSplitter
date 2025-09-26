@@ -97,7 +97,7 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       const clampedTime = Math.max(0, Math.min(time, duration));
       if (time > duration) {
         setTimeError(`End time cannot exceed track duration (${formatTime(duration)})`);
-      } else {
+    } else {
         setTimeError(null);
       }
       setSelectionEnd(clampedTime);
@@ -152,9 +152,9 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
         {!isWaveformReady && (
           <div className="flex items-center space-x-3 mb-4">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-400"></div>
-            <span className="text-white text-sm">Generating your waveform... This may take a few seconds to a couple of minutes, depending on the audio file size. Please wait for a better visualization!</span>
-          </div>
-        )}
+            <span className="text-gray-600 text-sm">Generating your waveform... This may take a few seconds to a couple of minutes, depending on the audio file size. Please wait for a better visualization!</span>
+            </div>
+          )}
         <Waveform
           audioUrl={audioUrl}
           expectedDuration={duration}
@@ -171,26 +171,26 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
       </div>
 
       {/* Selection Controls */}
-      <div className="bg-gray-800 rounded-lg p-4">
+      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="text-gray-300 text-sm mb-1 block">Start Time</label>
+            <label className="text-gray-600 text-sm mb-1 block">Start Time</label>
             <Input
               type="text"
               placeholder="0:00"
               value={startTimeInput}
               onChange={(e) => handleStartTimeChange(e.target.value)}
-              className="bg-gray-700 border-gray-600 text-white"
+              className="bg-white border-gray-200 text-gray-800 placeholder-gray-400 focus:border-gray-300 focus:ring-0"
             />
           </div>
           <div>
-            <label className="text-gray-300 text-sm mb-1 block">End Time</label>
+            <label className="text-gray-600 text-sm mb-1 block">End Time</label>
             <Input
               type="text"
               placeholder="0:00"
               value={endTimeInput}
               onChange={(e) => handleEndTimeChange(e.target.value)}
-              className="bg-gray-700 border-gray-600 text-white"
+              className="bg-white border-gray-200 text-gray-800 placeholder-gray-400 focus:border-gray-300 focus:ring-0"
             />
           </div>
         </div>
@@ -199,12 +199,12 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
         {timeError && (
           <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
             <p className="text-red-400 text-sm">{timeError}</p>
-          </div>
+      </div>
         )}
-        
+
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-600 text-sm">
               Selected area duration: {formatTime(selectionEnd - selectionStart)}
             </p>
             {!isSelectionValidForExport(selectionStart, selectionEnd) && (
@@ -217,23 +217,23 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
             <select
               value={format}
               onChange={(e) => setFormat(e.target.value)}
-              className="bg-gray-700 border-gray-600 text-white px-3 py-2 rounded"
+              className="bg-white border-gray-200 text-gray-800 px-3 py-2 rounded focus:border-gray-300 focus:ring-0"
             >
               <option value="mp3">MP3</option>
               <option value="wav">WAV</option>
               <option value="flac">FLAC</option>
             </select>
-            <Button
-              onClick={handleExport}
+              <Button
+                onClick={handleExport}
               disabled={!!timeError || !isSelectionValidForExport(selectionStart, selectionEnd)}
-              className="bg-gradient-to-r from-gray-700 to-gray-900 hover:from-gray-600 hover:to-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="h-4 w-4 mr-2" />
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-300"
+              >
+                <Download className="h-4 w-4 mr-2" />
               Export Selection
-            </Button>
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
     </div>
   );
 };
