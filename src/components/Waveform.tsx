@@ -79,6 +79,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       // Reset playhead to beginning when track ends
       audio.currentTime = 0;
       setCurrentTime(0);
+      // Force a re-render to ensure button state updates
+      setTimeout(() => {
+        setCurrentTime(0);
+      }, 0);
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);

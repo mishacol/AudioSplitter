@@ -67,7 +67,8 @@ const ManualSplitEditor: React.FC<ManualSplitEditorProps> = ({
   const isSelectionValidForExport = (start: number, end: number): boolean => {
     console.log('Checking export validity:', { start, end, duration, endGreaterThanStart: end > start, endWithinDuration: end <= duration });
     // Add small tolerance for floating point precision issues
-    return end > start && start >= 0 && end <= duration + 0.1;
+    const tolerance = 0.1;
+    return (end - start) > tolerance && start >= 0 && end <= duration + tolerance;
   };
 
   // Handle start time change

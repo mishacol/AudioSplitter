@@ -211,7 +211,14 @@ const AudioProcessor: React.FC = () => {
       setIsProcessing(false);
     };
     const onTime = () => setCurrentTime(audio.currentTime);
-    const onEnded = () => setIsPlaying(false);
+    const onEnded = () => {
+      setIsPlaying(false);
+      // Reset playhead to beginning when track ends
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        setCurrentTime(0);
+      }
+    };
     const onError = async () => {
       // Try proxy fallback once if it's a streaming URL
       const currentSrc = audio.currentSrc || audio.src;
@@ -785,7 +792,7 @@ const AudioProcessor: React.FC = () => {
                     setIsResolving(false);
                     setResolveProgress(0);
                   }}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm border border-gray-300"
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium text-sm py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm border border-gray-300"
                 >
                   Fetch New Track
                 </button>
@@ -807,38 +814,37 @@ const AudioProcessor: React.FC = () => {
                       stopPlayback();
                       setSplitMode('automatic');
                     }}
-                    className={`flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm border border-gray-300 ${
+                    className={`flex items-center gap-2 font-medium text-sm py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm ${
                       splitMode === 'automatic' 
-                        ? 'bg-gray-300' 
-                        : ''
+                        ? 'bg-gray-300 border-2 border-gray-500 text-gray-900' 
+                        : 'bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-300'
                     }`}
                   >
                     <Wand2 className="h-4 w-4" />
-                    Automatic Split
+                    Automatic
                   </button>
                   <button
                     onClick={() => {
                       stopPlayback();
                       setSplitMode('manual');
                     }}
-                    className={`flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm border border-gray-300 ${
+                    className={`flex items-center gap-2 font-medium text-sm py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm ${
                       splitMode === 'manual' 
-                        ? 'bg-gray-300'
-                        : ''
+                        ? 'bg-gray-300 border-2 border-gray-500 text-gray-900'
+                        : 'bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-300'
                     }`}
                   >
                     <Scissors className="h-4 w-4" />
-                    Manual Split
+                    Manual
                   </button>
                   {splitMode && (
-                    <Button
-                      variant="outline"
+                    <button
                       onClick={() => setSplitMode(null)}
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium text-sm py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105 shadow-sm border border-gray-300"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       Back to Preview
-                    </Button>
+                    </button>
                   )}
                 </div>
 
