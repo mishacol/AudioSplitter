@@ -46,6 +46,7 @@ const AudioProcessor: React.FC = () => {
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
   const [volume, setVolume] = useState(0.25);
   const [isMuted, setIsMuted] = useState(false);
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [resolveProgress, setResolveProgress] = useState(0);
   const [trackTitle, setTrackTitle] = useState<string | null>(null);
@@ -395,14 +396,86 @@ const AudioProcessor: React.FC = () => {
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Don't seek if we're currently dragging
+    if (isDraggingProgress) {
+      console.log('🎵 PREVIEW PLAYER: Ignoring seek during drag');
+      return;
+    }
+    
     const audio = audioRef.current;
     if (!audio || duration === 0) return;
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
     const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
     const newTime = ratio * duration;
+    
+    console.log('🎵 PREVIEW PLAYER: Seeking', {
+      from: audio.currentTime,
+      to: newTime,
+      duration: duration,
+      ratio
+    });
+    
     audio.currentTime = newTime;
     setCurrentTime(newTime);
   };
+
+  const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    console.log('🎵 PREVIEW PLAYER: Mouse down on progress bar', {
+      clientX: e.clientX,
+      isDraggingProgress
+    });
+    setIsDraggingProgress(true);
+    handleSeek(e);
+    // Prevent click event from firing after drag to avoid double-seeking
+    e.preventDefault();
+  };
+
+  const handleProgressMouseMove = (e: MouseEvent) => {
+    if (!isDraggingProgress) return;
+    
+    const audio = audioRef.current;
+    if (!audio || duration === 0) return;
+    
+    // Find the progress bar element
+    const progressBar = document.querySelector('.preview-progress-bar-container') as HTMLDivElement;
+    if (!progressBar) return;
+    
+    const rect = progressBar.getBoundingClientRect();
+    const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    const newTime = ratio * duration;
+    
+    console.log('🎵 PREVIEW PLAYER: Dragging progress', {
+      from: audio.currentTime,
+      to: newTime,
+      ratio,
+      clientX: e.clientX,
+      rectLeft: rect.left,
+      rectWidth: rect.width
+    });
+    
+    audio.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const handleProgressMouseUp = () => {
+    console.log('🎵 PREVIEW PLAYER: Mouse up on progress bar', {
+      isDraggingProgress
+    });
+    setIsDraggingProgress(false);
+  };
+
+  // Global mouse event listeners for dragging
+  useEffect(() => {
+    if (isDraggingProgress) {
+      document.addEventListener('mousemove', handleProgressMouseMove);
+      document.addEventListener('mouseup', handleProgressMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleProgressMouseMove);
+        document.removeEventListener('mouseup', handleProgressMouseUp);
+      };
+    }
+  }, [isDraggingProgress]);
 
   const handleVolume = (value: number) => {
     const clamped = Math.min(Math.max(value, 0), 1);
@@ -681,12 +754,13 @@ const AudioProcessor: React.FC = () => {
                 
                 <div className="flex-1 mx-6">
                   <div 
-                    className={`rounded-full h-2 relative ${
+                    className={`rounded-full h-2 relative preview-progress-bar-container ${
                       isProcessing && !audioFetched 
                         ? 'bg-gray-200 cursor-not-allowed' 
                         : 'bg-gray-200 cursor-pointer'
                     }`} 
                     onClick={isProcessing && !audioFetched ? undefined : handleSeek}
+                    onMouseDown={isProcessing && !audioFetched ? undefined : handleProgressMouseDown}
                   >
                     <div 
                       className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"

@@ -1,6 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
-import { peaksService, type PeaksJson } from '@/services/peaksService';
 
 type Props = {
   audioUrl: string;
@@ -12,41 +10,12 @@ type Props = {
 
 const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onWaveformReady, expectedDuration }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const progressBarRef = useRef<HTMLDivElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.25);
   const [isMuted, setIsMuted] = useState(false);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
-  // COMPLEX STATE MANAGEMENT - TEMPORARILY DISABLED FOR DEBUGGING
-  // const [jobId, setJobId] = useState<string | null>(null);
-  // const [low, setLow] = useState<PeaksJson | null>(null);
-  // const [high, setHigh] = useState<PeaksJson | null>(null);
-  // const [displayPeaks, setDisplayPeaks] = useState<number[] | null>(null);
-  // const [isDragging, setIsDragging] = useState(false);
-  // const [selectionStart, setSelectionStart] = useState<number | null>(null);
-  // const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
-  // const initialClickTimeRef = useRef<number | null>(null);
-  // const [zoomLevel, setZoomLevel] = useState(1);
-  // const [zoomCenter, setZoomCenter] = useState<number | null>(null);
-  // MORE COMPLEX STATE - TEMPORARILY DISABLED FOR DEBUGGING
-  // const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
-  // const [dragMode, setDragMode] = useState<'selection' | 'leftHandle' | 'rightHandle' | null>(null);
-  // const [hoveredHandle, setHoveredHandle] = useState<'leftHandle' | 'rightHandle' | null>(null);
-  // const [isLoopMode, setIsLoopMode] = useState(false);
-
-  // SELECTION LOGIC - TEMPORARILY DISABLED FOR DEBUGGING
-  /*
-  // Sync selection prop to internal state
-  useEffect(() => {
-    if (selection) {
-      setSelectionStart(selection.start);
-      setSelectionEnd(selection.end);
-    }
-  }, [selection]);
-  */
 
   // Set initial volume when audio loads
   useEffect(() => {
@@ -56,7 +25,15 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     }
   }, [audioUrl, volume, isMuted]);
 
-  // SIMPLE AUDIO EVENT HANDLERS - MINIMAL VERSION FOR DEBUGGING
+  // Set duration from expectedDuration on mount
+  useEffect(() => {
+    if (expectedDuration && isFinite(expectedDuration) && expectedDuration > 0 && duration === 0) {
+      console.log('🎛️ WAVEFORM PLAYER: Setting duration from expectedDuration', expectedDuration);
+      setDuration(expectedDuration);
+    }
+  }, [expectedDuration, duration]);
+
+  // AUDIO EVENT HANDLERS - EXACT COPY FROM PREVIEW PLAYER
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -64,17 +41,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const handleTimeUpdate = () => {
       const currentTime = audio.currentTime;
       setCurrentTime(currentTime);
-      // NO SELECTION LOGIC - JUST UPDATE TIME
-      
-      // Debug progress tracking
-      if (currentTime > 0 && currentTime % 5 < 0.1) { // Log every ~5 seconds
-        console.log('🎛️ WAVEFORM PLAYER: Progress update', {
-          currentTime: currentTime.toFixed(2),
-          duration: audio.duration,
-          isFinite: isFinite(audio.duration),
-          id: audio.id
-        });
-      }
     };
     
     const handleDurationChange = () => {
@@ -94,32 +60,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       }
     };
     
-    const handlePlay = () => {
-      console.log('🎛️ WAVEFORM PLAYER: handlePlay', {
-        id: audio.id,
-        currentTime: audio.currentTime
-      });
-      setIsPlaying(true);
-    };
-    
-    const handlePause = () => {
-      console.log('🎛️ WAVEFORM PLAYER: handlePause', {
-        id: audio.id,
-        currentTime: audio.currentTime
-      });
-      setIsPlaying(false);
-    };
-    
-    const handleEnded = () => {
-      console.log('🎛️ WAVEFORM PLAYER: handleEnded', {
-        id: audio.id,
-        currentTime: audio.currentTime,
-        duration: audio.duration
-      });
-      setIsPlaying(false);
-      // NO RESET TO 0:00 - LET USER CONTROL IT
-    };
-
     const handleLoadedMetadata = () => {
       console.log('🎛️ WAVEFORM PLAYER: handleLoadedMetadata', {
         duration: audio.duration,
@@ -135,6 +75,37 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         setDuration(expectedDuration);
         console.log('🎛️ WAVEFORM PLAYER: Duration set from expectedDuration to', expectedDuration);
       }
+    };
+    
+    const handlePlay = () => {
+      console.log('🎛️ WAVEFORM PLAYER: handlePlay', {
+        id: audio.id,
+        currentTime: audio.currentTime,
+        duration: audio.duration,
+        isPlaying
+      });
+      setIsPlaying(true);
+    };
+    
+    const handlePause = () => {
+      console.log('🎛️ WAVEFORM PLAYER: handlePause', {
+        id: audio.id,
+        currentTime: audio.currentTime,
+        duration: audio.duration,
+        isPlaying
+      });
+      setIsPlaying(false);
+    };
+    
+    const handleEnded = () => {
+      console.log('🎛️ WAVEFORM PLAYER: handleEnded', {
+        id: audio.id,
+        currentTime: audioRef.current?.currentTime,
+        duration: audioRef.current?.duration,
+        isPlaying
+      });
+      setIsPlaying(false);
+      // Don't reset audio position - let user control it
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -152,34 +123,13 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [audioUrl]);
+  }, [audioUrl, expectedDuration, isPlaying]);
 
-  // Set duration from expectedDuration if audio duration is not available
-  useEffect(() => {
-    if (expectedDuration && isFinite(expectedDuration) && expectedDuration > 0 && duration === 0) {
-      console.log('🎛️ WAVEFORM PLAYER: Setting duration from expectedDuration', expectedDuration);
-      setDuration(expectedDuration);
-    }
-  }, [expectedDuration, duration]);
-
-  // Add global mouse event listeners for progress bar dragging
-  useEffect(() => {
-    if (isDraggingProgress) {
-      document.addEventListener('mousemove', handleProgressMouseMove);
-      document.addEventListener('mouseup', handleProgressMouseUp);
-      
-      return () => {
-        document.removeEventListener('mousemove', handleProgressMouseMove);
-        document.removeEventListener('mouseup', handleProgressMouseUp);
-      };
-    }
-  }, [isDraggingProgress]);
-
-  // SIMPLE PLAYER FUNCTIONS - MINIMAL VERSION FOR DEBUGGING
-  const togglePlayPause = () => {
+  // PLAYER FUNCTIONS - EXACT COPY FROM PREVIEW PLAYER
+  const togglePlayPause = async () => {
     const audio = audioRef.current;
     if (!audio) return;
-
+    
     console.log('🎛️ WAVEFORM PLAYER: togglePlayPause called', {
       isPlaying,
       currentTime: audio.currentTime,
@@ -187,13 +137,13 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       src: audio.src?.split('/').pop(),
       id: audio.id
     });
-
+    
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
     } else {
       // Check if track has ended (currentTime is at or very close to duration)
-      const isAtEnd = audio.currentTime >= (duration - 0.1); // Use state duration, not audio.duration
+      const isAtEnd = audio.currentTime >= (duration - 0.1);
       
       if (isAtEnd) {
         console.log('🎛️ WAVEFORM PLAYER: Track ended, restarting from beginning');
@@ -201,27 +151,49 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         setCurrentTime(0);
       }
       
-      audio.play().catch(console.error);
-      setIsPlaying(true);
+      // Check if audio is ready
+      console.log('Audio readyState:', audio.readyState);
+      console.log('Audio src:', audio.src);
+      console.log('Audio networkState:', audio.networkState);
+      
+      if (audio.readyState < 2) {
+        console.log('Audio not ready, readyState:', audio.readyState);
+        // Try to force load more data
+        audio.load();
+        // Wait a bit and try again
+        setTimeout(() => {
+          console.log('After load(), readyState:', audio.readyState);
+          if (audio.readyState >= 2) {
+            audio.play().then(() => setIsPlaying(true)).catch(console.error);
+          } else {
+            console.log('Audio not ready, readyState:', audio.readyState);
+          }
+        }, 1000);
+        return;
+      }
+      
+      try {
+        await audio.play();
+        setIsPlaying(true);
+      } catch (e) {
+        console.error('Audio play failed:', e);
+        setIsPlaying(false);
+      }
     }
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
-    const audio = audioRef.current;
-    
-    // Use state duration instead of audio.duration (which can be Infinity)
-    if (!audio || duration === 0) {
-      console.log('🎛️ WAVEFORM PLAYER: Cannot seek - invalid duration', {
-        duration,
-        audioDuration: audio?.duration,
-        id: audio?.id
-      });
+    // Don't seek if we're currently dragging
+    if (isDraggingProgress) {
+      console.log('🎛️ WAVEFORM PLAYER: Ignoring seek during drag');
       return;
     }
     
+    const audio = audioRef.current;
+    if (!audio || duration === 0) return;
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
     const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
-    const newTime = ratio * duration; // Use state duration, not audio.duration
+    const newTime = ratio * duration;
     
     console.log('🎛️ WAVEFORM PLAYER: Seeking', {
       from: audio.currentTime,
@@ -241,7 +213,6 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     });
     setIsDraggingProgress(true);
     handleSeek(e);
-    
     // Prevent click event from firing after drag to avoid double-seeking
     e.preventDefault();
   };
@@ -250,17 +221,15 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     if (!isDraggingProgress) return;
     
     const audio = audioRef.current;
-    
-    // Use state duration instead of audio.duration
     if (!audio || duration === 0) return;
     
-    // Use the ref instead of querySelector
-    const progressBar = progressBarRef.current;
+    // Find the progress bar element
+    const progressBar = document.querySelector('.waveform-progress-bar-container') as HTMLDivElement;
     if (!progressBar) return;
     
     const rect = progressBar.getBoundingClientRect();
     const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
-    const newTime = ratio * duration; // Use state duration, not audio.duration
+    const newTime = ratio * duration;
     
     console.log('🎛️ WAVEFORM PLAYER: Dragging progress', {
       from: audio.currentTime,
@@ -281,6 +250,19 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     });
     setIsDraggingProgress(false);
   };
+
+  // Global mouse event listeners for dragging
+  useEffect(() => {
+    if (isDraggingProgress) {
+      document.addEventListener('mousemove', handleProgressMouseMove);
+      document.addEventListener('mouseup', handleProgressMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleProgressMouseMove);
+        document.removeEventListener('mouseup', handleProgressMouseUp);
+      };
+    }
+  }, [isDraggingProgress]);
 
   const handleVolume = (value: number) => {
     const clamped = Math.min(Math.max(value, 0), 1);
@@ -303,528 +285,28 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       audio.volume = volume;
       setIsMuted(false);
     } else {
-      // Mute - set volume to 0
+      // Mute - save current volume and set to 0
       audio.volume = 0;
       setIsMuted(true);
     }
   };
 
-  const formatTime = (seconds: number) => {
-    if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const formatTime = (time: number) => {
+    if (!isFinite(time) || time < 0) return '0:00';
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
-
-  const durationFromPeaks = (p?: PeaksJson | null) => {
-    if (!p) return 0;
-    if (p.duration && p.duration > 0) return p.duration;
-    if (p.points && (p as any).window_samples && p.sample_rate) {
-      const windowSamples = (p as any).window_samples as number;
-      const est = (p.points * windowSamples) / p.sample_rate;
-      return Number.isFinite(est) && est > 0 ? est : 0;
-    }
-    return 0;
-  };
-
-  // EFFECTIVE DURATION CALCULATION - TEMPORARILY DISABLED FOR DEBUGGING
-  // const effectiveDuration = (() => {
-  //   // If we have high-res peaks, use their duration (this is the actual processed audio length)
-  //   const highDur = durationFromPeaks(high);
-  //   if (highDur > 0) return highDur;
-  //   
-  //   // Check if audio duration is valid (not 0, not Infinity, not NaN)
-  //   if (duration && Number.isFinite(duration) && duration > 0) {
-  //     return duration;
-  //   }
-  //   // Prioritize expected duration over placeholder peaks
-  //   if (expectedDuration && Number.isFinite(expectedDuration) && expectedDuration > 0) {
-  //     return expectedDuration;
-  //   }
-  //   // Fall back to low-res peaks duration (only if not placeholder)
-  //   const lowDur = durationFromPeaks(low);
-  //   if (lowDur > 0 && lowDur > 1) return lowDur; // Ignore placeholder durations < 1 second
-  //   return 0;
-  // })();
-  
-  // Use simple duration for debugging
-  const effectiveDuration = duration;
-
-  // CANVAS WAVEFORM RENDERER - TEMPORARILY DISABLED FOR DEBUGGING
-  /*
-  // Canvas waveform renderer (peaks + playhead + selection)
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const audio = audioRef.current;
-    if (!canvas || !audio) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Fit to device pixel ratio
-    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-    const rect = canvas.getBoundingClientRect();
-    const cssHeight = 150;
-    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    canvas.height = Math.floor(cssHeight * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    const drawPeaks = () => {
-      if (!displayPeaks || displayPeaks.length === 0) {
-        return;
-      }
-      const width = rect.width;
-      const height = cssHeight;
-      const midY = height / 2;
-      const pixels = Math.max(1, Math.floor(width));
-      
-      // Professional black waveform for minimalist design
-      ctx.fillStyle = '#000000'; // Black color
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1;
-      
-      // Calculate zoom parameters
-      const centerTime = zoomCenter || effectiveDuration / 2;
-      const visibleDuration = effectiveDuration / zoomLevel;
-      const startTime = Math.max(0, centerTime - visibleDuration / 2);
-      const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
-      
-      // Draw waveform as vertical bars (like professional audio editors)
-      for (let x = 0; x < pixels; x++) {
-        // Map screen pixel to time
-        const screenTime = startTime + (x / pixels) * (endTime - startTime);
-        
-        // Map time to peaks array index
-        const peakIndex = Math.floor((screenTime / effectiveDuration) * displayPeaks.length);
-        
-        if (peakIndex >= 0 && peakIndex < displayPeaks.length) {
-          const v = Math.abs(displayPeaks[peakIndex] || 0);
-          
-          // Draw vertical bar from center line
-          const barHeight = Math.max(1, v * (height - 20) / 2);
-          ctx.fillRect(x, midY - barHeight, 1, barHeight * 2);
-        }
-      }
-    };
-
-    let raf = 0;
-    const render = () => {
-      const w = rect.width;
-      const h = cssHeight;
-      
-      // Light gray background for unselected area
-      ctx.fillStyle = '#F5F5F5'; // Light gray
-      ctx.fillRect(0, 0, w, h);
-      
-      // waveform
-      drawPeaks();
-
-      // selection overlay with new color scheme
-      if (selectionStart != null && selectionEnd != null && effectiveDuration > 0) {
-        // Calculate zoom parameters for selection rendering
-        const centerTime = zoomCenter || effectiveDuration / 2;
-        const visibleDuration = effectiveDuration / zoomLevel;
-        const startTime = Math.max(0, centerTime - visibleDuration / 2);
-        const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
-        
-        // Map selection times to screen coordinates
-        const sx = ((selectionStart - startTime) / (endTime - startTime)) * w;
-        const ex = ((selectionEnd - startTime) / (endTime - startTime)) * w;
-        const left = Math.min(sx, ex);
-        const right = Math.max(sx, ex);
-        
-        // Only draw selection if it's visible in current zoom window
-        if (right >= 0 && left <= w) {
-          // Muted green selection overlay
-          ctx.fillStyle = 'rgba(34, 197, 94, 0.2)'; // Muted green overlay
-          ctx.fillRect(left, 0, right - left, h);
-          
-          // Black selection frame
-          ctx.strokeStyle = '#000000'; // Black frame
-          ctx.lineWidth = 2;
-          ctx.strokeRect(left, 0, right - left, h);
-          
-          // Dark gray handles for adjustments
-          const handleWidth = 4;
-          const handleHeight = h;
-          
-          // Left handle
-          const isLeftHovered = hoveredHandle === 'leftHandle';
-          const isLeftDragging = dragMode === 'leftHandle';
-          ctx.fillStyle = isLeftHovered || isLeftDragging ? '#404040' : '#666666'; // Dark gray, darker when hovered/dragging
-          ctx.fillRect(left - handleWidth/2, 0, handleWidth, handleHeight);
-          
-          // Right handle
-          const isRightHovered = hoveredHandle === 'rightHandle';
-          const isRightDragging = dragMode === 'rightHandle';
-          ctx.fillStyle = isRightHovered || isRightDragging ? '#404040' : '#666666'; // Dark gray, darker when hovered/dragging
-          ctx.fillRect(right - handleWidth/2, 0, handleWidth, handleHeight);
-          
-          // Add hollow rectangular grip in the center of each handle
-          ctx.fillStyle = '#FFFFFF'; // White background for the hollow area
-          const gripWidth = 4;
-          const gripHeight = 20;
-          const gripX = left - gripWidth/2;
-          const gripY = (handleHeight - gripHeight) / 2;
-          
-          // Left handle hollow grip
-          ctx.fillRect(gripX, gripY, gripWidth, gripHeight);
-          
-          // Right handle hollow grip
-          const rightGripX = right - gripWidth/2;
-          ctx.fillRect(rightGripX, gripY, gripWidth, gripHeight);
-        }
-      }
-
-      // playhead with new color scheme
-      if (effectiveDuration > 0) {
-        const centerTime = zoomCenter || effectiveDuration / 2;
-        const visibleDuration = effectiveDuration / zoomLevel;
-        const startTime = Math.max(0, centerTime - visibleDuration / 2);
-        const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
-        
-        const x = ((currentTime - startTime) / (endTime - startTime)) * w;
-        
-        // Only draw playhead if it's visible in current zoom window
-        if (x >= 0 && x <= w) {
-          // Check if playhead is inside selection
-          const isInsideSelection = selectionStart != null && selectionEnd != null && 
-            currentTime >= selectionStart && currentTime <= selectionEnd;
-          
-          // Soft red outside selection, bright green inside selection
-          ctx.fillStyle = isInsideSelection ? '#22C55E' : '#F87171'; // Bright green inside, soft red outside
-          ctx.fillRect(Math.max(0, Math.min(w - 2, x)), 0, 2, h);
-        }
-      }
-
-      raf = requestAnimationFrame(render);
-    };
-
-    raf = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(raf);
-  }, [currentTime, effectiveDuration, displayPeaks, selectionStart, selectionEnd, zoomLevel, zoomCenter, hoveredHandle, dragMode, isLoopMode]);
-  */
-
-  // PEAKS AND COMPLEX LOGIC - TEMPORARILY DISABLED FOR DEBUGGING
-  /*
-  // Start peaks job when audioUrl changes
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const job = await peaksService.start(audioUrl);
-        if (cancelled) return;
-        setJobId(job.job_id);
-        const lowData = await peaksService.waitForLow(job.job_id, 5000);
-        if (!cancelled) {
-          setLow(lowData);
-          if (lowData) console.log('Low peaks loaded:', { points: lowData.points, duration: lowData.duration });
-        }
-        // kick off high-res fetch but don't block UI
-        peaksService.waitForHigh(job.job_id).then((h) => {
-          if (!cancelled) {
-            setHigh(h);
-            if (h) console.log('High peaks loaded:', { points: h.points, duration: h.duration });
-            // Call onWaveformReady when high-res peaks are loaded
-            onWaveformReady?.();
-          }
-        });
-      } catch (e) {
-        console.error('peaks job error', e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [audioUrl]);
-
-  // Pick peaks to display (prefer high-res when ready)
-  useEffect(() => {
-    console.log('Peaks update:', { 
-      high: high ? { points: high.points, duration: high.duration, peaksLength: high.peaks?.length } : null,
-      low: low ? { points: low.points, duration: low.duration, peaksLength: low.peaks?.length } : null
-    });
-    
-    if (high && Array.isArray(high.peaks) && high.peaks.length > 0) {
-      console.log('Setting displayPeaks to high-res:', high.peaks.length, 'peaks');
-      setDisplayPeaks(high.peaks);
-    } else if (low && Array.isArray(low.peaks) && low.peaks.length > 0) {
-      console.log('Setting displayPeaks to low-res:', low.peaks.length, 'peaks');
-      setDisplayPeaks(low.peaks);
-    } else {
-      console.log('No valid peaks to display');
-    }
-  }, [low, high]);
-
-  // Auto-jump playhead to selection start when selection is created
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !selectionStart || !selectionEnd) return;
-    
-    // Only jump if we have a valid selection and it's not a zero-width selection
-    if (selectionStart !== selectionEnd) {
-      const startTime = Math.min(selectionStart, selectionEnd);
-      audio.currentTime = startTime;
-      setCurrentTime(startTime);
-    }
-  }, [selectionStart, selectionEnd]);
-
-  // Monitor playhead position for loop mode
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || selectionStart === null || selectionEnd === null || selectionStart === selectionEnd) {
-      console.log('Loop mode disabled - no valid selection:', { selectionStart, selectionEnd });
-      setIsLoopMode(false);
-      return;
-    }
-    
-    const startTime = Math.min(selectionStart, selectionEnd);
-    const endTime = Math.max(selectionStart, selectionEnd);
-    
-    // Check if playhead is inside selection (with tolerance for floating-point precision)
-    const tolerance = 0.001; // 1ms tolerance
-    const isInsideSelection = currentTime >= (startTime - tolerance) && currentTime <= (endTime + tolerance);
-    
-    console.log('Loop mode check:', {
-      currentTime,
-      startTime,
-      endTime,
-      isInsideSelection,
-      isLoopMode,
-      selectionStart,
-      selectionEnd,
-      tolerance,
-      currentTimeMinusTolerance: currentTime - tolerance,
-      currentTimePlusTolerance: currentTime + tolerance,
-      startTimeMinusTolerance: startTime - tolerance,
-      endTimePlusTolerance: endTime + tolerance
-    });
-    
-    if (isInsideSelection && !isLoopMode) {
-      // Entered selection - enable loop mode
-      console.log('Enabling loop mode');
-      setIsLoopMode(true);
-    } else if (!isInsideSelection && isLoopMode) {
-      // Exited selection - disable loop mode
-      console.log('Disabling loop mode');
-      setIsLoopMode(false);
-    }
-  }, [currentTime, selectionStart, selectionEnd, isLoopMode]);
-
-  // Auto-scroll to follow playhead when zoomed in
-  useEffect(() => {
-    if (!autoScrollEnabled || !isPlaying || zoomLevel <= 1) return;
-    
-    const centerTime = zoomCenter || effectiveDuration / 2;
-    const visibleDuration = effectiveDuration / zoomLevel;
-    const startTime = Math.max(0, centerTime - visibleDuration / 2);
-    const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
-    
-    // Check if playhead is outside visible range
-    if (currentTime < startTime || currentTime > endTime) {
-      // Smoothly scroll to center playhead
-      setZoomCenter(currentTime);
-    }
-  }, [currentTime, isPlaying, autoScrollEnabled, zoomLevel, effectiveDuration, zoomCenter]);
-
-  // Zoom to selection when selection is created (DISABLED - too confusing when adjusting handles)
-  useEffect(() => {
-    // Disabled automatic zoom-to-selection to prevent confusion when adjusting handles
-    // Users can manually zoom using mouse wheel if they want to focus on selection
-    return;
-    
-    if (!selectionStart || !selectionEnd || selectionStart === selectionEnd) return;
-    
-    const selectionDuration = Math.abs(selectionEnd - selectionStart);
-    const selectionCenter = (selectionStart + selectionEnd) / 2;
-    
-    // Calculate zoom level to fit selection with some padding
-    const padding = 0.2; // 20% padding on each side
-    const targetZoomLevel = effectiveDuration / (selectionDuration * (1 + padding * 2));
-    
-    // Only zoom if it's a meaningful zoom (not too extreme)
-    if (targetZoomLevel > 1 && targetZoomLevel < 16) {
-      setZoomLevel(targetZoomLevel);
-      setZoomCenter(selectionCenter);
-    }
-  }, [selectionStart, selectionEnd, effectiveDuration]);
-
-  // Canvas mouse interactions: click-to-seek + drag-select
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const audio = audioRef.current;
-    if (!canvas || !audio) return;
-
-    const getTimeAt = (clientX: number) => {
-      const rect = canvas.getBoundingClientRect();
-      const ratio = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
-      
-      // Calculate zoom parameters
-      const centerTime = zoomCenter || effectiveDuration / 2;
-      const visibleDuration = effectiveDuration / zoomLevel;
-      const startTime = Math.max(0, centerTime - visibleDuration / 2);
-      const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
-      
-      return startTime + ratio * (endTime - startTime);
-    };
-
-    // Check which handle is being clicked (if any)
-    const getHandleAt = (clientX: number): 'leftHandle' | 'rightHandle' | null => {
-      if (selectionStart === null || selectionEnd === null || selectionStart === selectionEnd) return null;
-      
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = clientX - rect.left;
-      
-      // Calculate zoom parameters
-      const centerTime = zoomCenter || effectiveDuration / 2;
-      const visibleDuration = effectiveDuration / zoomLevel;
-      const startTime = Math.max(0, centerTime - visibleDuration / 2);
-      const endTime = Math.min(effectiveDuration, centerTime + visibleDuration / 2);
-      
-      // Map selection times to screen coordinates
-      const leftX = ((selectionStart - startTime) / (endTime - startTime)) * rect.width;
-      const rightX = ((selectionEnd - startTime) / (endTime - startTime)) * rect.width;
-      
-      const handleWidth = 8; // Handle detection area (wider than visual marker)
-      
-      // Check if mouse is over left handle
-      if (mouseX >= leftX - handleWidth/2 && mouseX <= leftX + handleWidth/2) {
-        return 'leftHandle';
-      }
-      
-      // Check if mouse is over right handle
-      if (mouseX >= rightX - handleWidth/2 && mouseX <= rightX + handleWidth/2) {
-        return 'rightHandle';
-      }
-      
-      return null;
-    };
-
-    let dragStartTime = 0;
-    let isClick = true;
-
-    const onDown = (e: MouseEvent) => {
-      if (e.target !== canvas) return; // ignore clicks outside canvas
-      
-      dragStartTime = Date.now();
-      isClick = true;
-      setIsDragging(true);
-      
-      // Check if clicking on a handle
-      const handle = getHandleAt(e.clientX);
-      if (handle) {
-        setDragMode(handle);
-        return; // Don't create new selection when dragging handles
-      }
-      
-      // Normal selection creation
-      setDragMode('selection');
-      const t = getTimeAt(e.clientX);
-      initialClickTimeRef.current = t;
-      setSelectionStart(t);
-      setSelectionEnd(t);
-      onSelectionChange?.(t, t);
-    };
-
-    const onMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-      
-      // If mouse moved significantly, it's a drag, not a click
-      if (Date.now() - dragStartTime > 100) {
-        isClick = false;
-      }
-      
-      const t = getTimeAt(e.clientX);
-      
-      if (dragMode === 'leftHandle') {
-        // Drag left handle - update start time only, constrained by right handle
-        const newStart = Math.max(0, Math.min(t, selectionEnd || 0));
-        setSelectionStart(newStart);
-        onSelectionChange?.(newStart, selectionEnd);
-      } else if (dragMode === 'rightHandle') {
-        // Drag right handle - update end time only, constrained by left handle
-        const newEnd = Math.min(effectiveDuration, Math.max(t, selectionStart || 0));
-        setSelectionEnd(newEnd);
-        onSelectionChange?.(selectionStart, newEnd);
-      } else if (dragMode === 'selection') {
-        // Normal selection drag
-        const start = Math.min(initialClickTimeRef.current || 0, t);
-        const end = Math.max(initialClickTimeRef.current || 0, t);
-        
-        setSelectionStart(start);
-        setSelectionEnd(end);
-        onSelectionChange?.(start, end);
-      }
-    };
-
-    const onUp = (e: MouseEvent) => {
-      // Always handle mouse up, regardless of dragging state
-      setIsDragging(false);
-      setDragMode(null);
-      
-      // If it was a click (not a drag), seek to that position
-      if (isClick && e.target === canvas && dragMode === 'selection') {
-        const t = getTimeAt(e.clientX);
-        audio.currentTime = t;
-        setCurrentTime(t);
-      }
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      
-      // Only allow zooming if high-res peaks are loaded
-      if (!high || !effectiveDuration || effectiveDuration <= 0) return;
-      
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseTime = getTimeAt(e.clientX);
-      
-      // Set zoom center to mouse position if not already set
-      if (zoomCenter === null) {
-        setZoomCenter(mouseTime);
-      }
-      
-      // Calculate zoom change
-      const zoomFactor = e.deltaY > 0 ? 0.8 : 1.25; // Zoom out on scroll down, zoom in on scroll up
-      const newZoomLevel = Math.max(0.1, Math.min(32, zoomLevel * zoomFactor));
-      
-      // Update zoom center to mouse position for smooth zooming
-      setZoomCenter(mouseTime);
-      setZoomLevel(newZoomLevel);
-    };
-
-    const onMouseMove = (e: MouseEvent) => {
-      // Check for handle hover (only when not dragging)
-      if (!isDragging) {
-        const handle = getHandleAt(e.clientX);
-        setHoveredHandle(handle);
-      }
-    };
-
-    canvas.addEventListener('mousedown', onDown);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-    canvas.addEventListener('mousemove', onMouseMove);
-    return () => {
-      canvas.removeEventListener('mousedown', onDown);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      canvas.removeEventListener('wheel', onWheel);
-      canvas.removeEventListener('mousemove', onMouseMove);
-    };
-  }, [effectiveDuration, isDragging, selectionStart, zoomLevel, zoomCenter, dragMode, hoveredHandle]);
-  */
 
   return (
     <div className="space-y-4">
       {/* Simple placeholder - NO CANVAS FOR DEBUGGING */}
       <div className="bg-gray-100 rounded p-4 text-center text-gray-500">
-        <p>Simple Audio Player - No Waveform</p>
-        <p className="text-sm">Canvas rendering disabled for debugging</p>
+        <p>Bare Audio Player - Exact Copy of Preview Player</p>
+        <p className="text-sm">All complex logic stripped out, identical to preview player</p>
       </div>
       
-      {/* Custom Player Controls */}
+      {/* Custom Player Controls - EXACT COPY FROM PREVIEW PLAYER */}
       <div className="flex items-center justify-between gap-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
         <button
           onClick={togglePlayPause}
@@ -843,15 +325,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         
         <div className="flex-1 mx-6">
           <div 
-            ref={progressBarRef}
-            className="rounded-full h-2 bg-gray-200 cursor-pointer relative progress-bar-container" 
+            className="rounded-full h-2 bg-gray-200 cursor-pointer relative waveform-progress-bar-container" 
             onClick={handleSeek}
             onMouseDown={handleProgressMouseDown}
           >
-              <div 
-                className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
-                style={{ width: `${duration && isFinite(duration) && duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-              >
+            <div 
+              className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
+              style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
+            >
               {/* Slide switch handle */}
               <div 
                 className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
@@ -864,9 +345,9 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           </div>
         </div>
         
-          <span className="text-gray-600 text-sm min-w-[80px] text-right">
-            {formatTime(currentTime)} / {isFinite(duration) && duration > 0 ? formatTime(duration) : 'Loading...'}
-          </span>
+        <span className="text-gray-600 text-sm min-w-[80px] text-right">
+          {formatTime(currentTime)} / {isFinite(duration) && duration > 0 ? formatTime(duration) : 'Loading...'}
+        </span>
 
         {/* Volume */}
         <div className="flex items-center gap-2 w-40">
@@ -911,34 +392,23 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
               const rect = e.currentTarget.getBoundingClientRect();
               const clickX = e.clientX - rect.left;
               const percentage = clickX / rect.width;
-              const newVolume = Math.max(0, Math.min(1, percentage));
-              handleVolume(newVolume);
+              handleVolume(percentage);
             }}
           >
             <div 
-              className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
-              style={{ width: `${(isMuted ? 0 : volume) * 100}%` }}
-            >
-              {/* Slide switch handle */}
-              <div 
-                className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
-                style={{ 
-                  right: '-8px',
-                  transform: 'translateY(-50%)'
-                }}
-              />
-            </div>
+              className="h-2 bg-gray-800 rounded-full"
+              style={{ width: `${isMuted ? 0 : volume * 100}%` }}
+            />
           </div>
         </div>
       </div>
       
-      {/* Hidden audio element */}
       <audio 
-        ref={audioRef} 
-        src={audioUrl} 
-        className="hidden" 
-        preload="auto"
+        ref={audioRef}
+        src={audioUrl}
+        preload="metadata"
         crossOrigin="anonymous"
+        className="hidden"
         id="waveform-player-audio"
       />
     </div>
