@@ -325,9 +325,62 @@ app.get('/stream', async (req, res) => {
     return res.status(400).json({ error: 'Missing url' });
   }
   try {
+    // Handle YouTube URLs FIRST by redirecting to Python backend
+    if (sourceUrl.includes('youtube.com') || sourceUrl.includes('youtu.be')) {
+      console.log('YouTube URL detected, redirecting to Python backend:', sourceUrl);
+      
+      try {
+        // Get the direct audio URL from Python backend
+        const pythonResponse = await fetch('http://localhost:5000/metadata', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ url: sourceUrl })
+        });
+        
+        if (!pythonResponse.ok) {
+          throw new Error(`Python backend error: ${pythonResponse.status}`);
+        }
+        
+        const metadata = await pythonResponse.json();
+        console.log('Python backend metadata:', metadata);
+        
+        if (metadata.direct_audio_url) {
+          console.log('Using direct audio URL from Python backend:', metadata.direct_audio_url);
+          // Use the direct URL from Python backend
+          const upstream = await fetch(metadata.direct_audio_url, {
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              'Referer': sourceUrl,
+            },
+          });
+          
+          if (!upstream.ok) {
+            throw new Error(`Failed to fetch audio: ${upstream.status}`);
+          }
+          
+          // Forward headers
+          res.status(upstream.status);
+          const contentType = upstream.headers.get('content-type') || 'audio/mpeg';
+          res.setHeader('Content-Type', contentType);
+          
+          // Stream the audio
+          upstream.body.pipe(res);
+          return;
+        } else {
+          throw new Error('No direct audio URL from Python backend');
+        }
+      } catch (error) {
+        console.error('Python backend streaming failed:', error);
+        res.status(500).json({ error: 'Unable to resolve media URL' });
+        return;
+      }
+    }
+
     // Check if this is already a direct media URL (from /resolve endpoint)
-    const isDirectUrl = sourceUrl.includes('googlevideo.com') || 
-                       sourceUrl.includes('soundcloud.com') || 
+    const isDirectUrl = sourceUrl.includes('soundcloud.com') || 
                        sourceUrl.includes('.mp3') || 
                        sourceUrl.includes('.m4a') ||
                        sourceUrl.includes('.webm') ||
@@ -347,6 +400,8 @@ app.get('/stream', async (req, res) => {
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
+        f: 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio',
+        extractorArgs: 'youtube:player_client=android',
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${sourceUrl}`,
@@ -368,8 +423,9 @@ app.get('/stream', async (req, res) => {
     if (!directUrl) {
       try {
         const stdout = await youtubedl(sourceUrl, {
-          f: 'bestaudio',
+          f: 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio',
           g: true,
+          extractorArgs: 'youtube:player_client=android',
           addHeader: [
             `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
             `Referer: ${sourceUrl}`,
@@ -407,7 +463,7 @@ app.get('/stream', async (req, res) => {
       return;
     }
 
-    // Proxy the direct URL and forward Range header for seeking
+    // Proxy the direct URL and forward Range header for seeking (non-YouTube URLs)
     const range = req.headers['range'];
     const upstream = await fetch(directUrl, {
       method: 'GET',
