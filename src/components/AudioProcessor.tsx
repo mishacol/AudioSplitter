@@ -212,7 +212,8 @@ const AudioProcessor: React.FC = () => {
     };
     const onTime = () => setCurrentTime(audio.currentTime);
     const onEnded = () => {
-      console.log('AudioProcessor onEnded fired:', {
+      console.log('🎵 PREVIEW PLAYER: onEnded', {
+        id: audio.id,
         currentTime: audioRef.current?.currentTime,
         duration: audioRef.current?.duration,
         isPlaying
@@ -340,10 +341,27 @@ const AudioProcessor: React.FC = () => {
     const audio = audioRef.current;
     if (!audio) return;
     
+    console.log('🎵 PREVIEW PLAYER: togglePlay called', {
+      isPlaying,
+      currentTime: audio.currentTime,
+      duration: audio.duration,
+      src: audio.src?.split('/').pop(),
+      id: audio.id
+    });
+    
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
     } else {
+      // Check if track has ended (currentTime is at or very close to duration)
+      const isAtEnd = audio.currentTime >= (duration - 0.1);
+      
+      if (isAtEnd) {
+        console.log('🎵 PREVIEW PLAYER: Track ended, restarting from beginning');
+        audio.currentTime = 0;
+        setCurrentTime(0);
+      }
+      
       // Check if audio is ready
       console.log('Audio readyState:', audio.readyState);
       console.log('Audio src:', audio.src);
@@ -530,6 +548,7 @@ const AudioProcessor: React.FC = () => {
                 className="hidden" 
                 preload="auto" 
                 crossOrigin="anonymous"
+                id="preview-player-audio"
                 src={resolvedAudioUrl ? (resolvedAudioUrl.startsWith("http://localhost:3001/stream") ? resolvedAudioUrl : `http://localhost:3001/stream?url=${encodeURIComponent(resolvedAudioUrl)}`) : undefined}
                 onLoadStart={() => {
                   console.log('Audio loading started');

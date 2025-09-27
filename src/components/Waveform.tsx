@@ -13,26 +13,32 @@ type Props = {
 const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onWaveformReady, expectedDuration }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const progressBarRef = useRef<HTMLDivElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.25);
   const [isMuted, setIsMuted] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [low, setLow] = useState<PeaksJson | null>(null);
-  const [high, setHigh] = useState<PeaksJson | null>(null);
-  const [displayPeaks, setDisplayPeaks] = useState<number[] | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [selectionStart, setSelectionStart] = useState<number | null>(null);
-  const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
-  const initialClickTimeRef = useRef<number | null>(null);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [zoomCenter, setZoomCenter] = useState<number | null>(null);
-  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
-  const [dragMode, setDragMode] = useState<'selection' | 'leftHandle' | 'rightHandle' | null>(null);
-  const [hoveredHandle, setHoveredHandle] = useState<'leftHandle' | 'rightHandle' | null>(null);
-  const [isLoopMode, setIsLoopMode] = useState(false);
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
+  // COMPLEX STATE MANAGEMENT - TEMPORARILY DISABLED FOR DEBUGGING
+  // const [jobId, setJobId] = useState<string | null>(null);
+  // const [low, setLow] = useState<PeaksJson | null>(null);
+  // const [high, setHigh] = useState<PeaksJson | null>(null);
+  // const [displayPeaks, setDisplayPeaks] = useState<number[] | null>(null);
+  // const [isDragging, setIsDragging] = useState(false);
+  // const [selectionStart, setSelectionStart] = useState<number | null>(null);
+  // const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
+  // const initialClickTimeRef = useRef<number | null>(null);
+  // const [zoomLevel, setZoomLevel] = useState(1);
+  // const [zoomCenter, setZoomCenter] = useState<number | null>(null);
+  // MORE COMPLEX STATE - TEMPORARILY DISABLED FOR DEBUGGING
+  // const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  // const [dragMode, setDragMode] = useState<'selection' | 'leftHandle' | 'rightHandle' | null>(null);
+  // const [hoveredHandle, setHoveredHandle] = useState<'leftHandle' | 'rightHandle' | null>(null);
+  // const [isLoopMode, setIsLoopMode] = useState(false);
 
+  // SELECTION LOGIC - TEMPORARILY DISABLED FOR DEBUGGING
+  /*
   // Sync selection prop to internal state
   useEffect(() => {
     if (selection) {
@@ -40,6 +46,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       setSelectionEnd(selection.end);
     }
   }, [selection]);
+  */
 
   // Set initial volume when audio loads
   useEffect(() => {
@@ -49,7 +56,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     }
   }, [audioUrl, volume, isMuted]);
 
-  // Audio event handlers
+  // SIMPLE AUDIO EVENT HANDLERS - MINIMAL VERSION FOR DEBUGGING
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -57,85 +64,82 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     const handleTimeUpdate = () => {
       const currentTime = audio.currentTime;
       setCurrentTime(currentTime);
+      // NO SELECTION LOGIC - JUST UPDATE TIME
       
-      // Guard against floating-point precision - clamp to selection bounds
-      if (selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd) {
-        const startTime = Math.min(selectionStart, selectionEnd);
-        const endTime = Math.max(selectionStart, selectionEnd);
-
-        // Check if we're near the end of the track (within 0.1 seconds)
-        const isNearTrackEnd = audio.duration && (audio.duration - currentTime) < 0.1;
-        
-        if (currentTime >= endTime || isNearTrackEnd) {
-          console.log('handleTimeUpdate: Looping back to selection start:', {
-            currentTime,
-            endTime,
-            startTime,
-            isNearTrackEnd,
-            trackDuration: audio.duration
-          });
-          audio.currentTime = startTime;
-          setCurrentTime(startTime);
-          audio.play();
-        }
+      // Debug progress tracking
+      if (currentTime > 0 && currentTime % 5 < 0.1) { // Log every ~5 seconds
+        console.log('🎛️ WAVEFORM PLAYER: Progress update', {
+          currentTime: currentTime.toFixed(2),
+          duration: audio.duration,
+          isFinite: isFinite(audio.duration),
+          id: audio.id
+        });
       }
     };
-    const handleDurationChange = () => setDuration(audio.duration || 0);
-    const handlePlay = () => {
-      console.log('handlePlay called:', {
-        hasAudio: !!audio,
-        selectionStart,
-        selectionEnd,
-        hasValidSelection: selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd
+    
+    const handleDurationChange = () => {
+      console.log('🎛️ WAVEFORM PLAYER: handleDurationChange', {
+        duration: audio.duration,
+        isFinite: isFinite(audio.duration),
+        isNaN: isNaN(audio.duration),
+        id: audio.id
       });
       
-      if (!audio) return;
-
-      if (selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd) {
-        const startTime = Math.min(selectionStart, selectionEnd);
-        console.log('Starting playback at selection start:', startTime);
-        audio.currentTime = startTime;   // start at selection
-        setCurrentTime(startTime);
+      // Only set duration if it's a valid finite number
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+        console.log('🎛️ WAVEFORM PLAYER: Duration set to', audio.duration);
       } else {
-        console.log('Starting playback from current position (no selection)');
-        // Don't reset to 0:00 - resume from current position
-        // audio.currentTime is already at the correct position
+        console.log('🎛️ WAVEFORM PLAYER: Invalid duration, keeping current value');
       }
-
-      audio.play();
+    };
+    
+    const handlePlay = () => {
+      console.log('🎛️ WAVEFORM PLAYER: handlePlay', {
+        id: audio.id,
+        currentTime: audio.currentTime
+      });
       setIsPlaying(true);
     };
-    const handlePause = () => setIsPlaying(false);
+    
+    const handlePause = () => {
+      console.log('🎛️ WAVEFORM PLAYER: handlePause', {
+        id: audio.id,
+        currentTime: audio.currentTime
+      });
+      setIsPlaying(false);
+    };
+    
     const handleEnded = () => {
-      console.log('Waveform handleEnded fired:', {
-        isLoopMode,
-        selectionStart,
-        selectionEnd,
+      console.log('🎛️ WAVEFORM PLAYER: handleEnded', {
+        id: audio.id,
         currentTime: audio.currentTime,
+        duration: audio.duration
+      });
+      setIsPlaying(false);
+      // NO RESET TO 0:00 - LET USER CONTROL IT
+    };
+
+    const handleLoadedMetadata = () => {
+      console.log('🎛️ WAVEFORM PLAYER: handleLoadedMetadata', {
         duration: audio.duration,
-        hasValidSelection: selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd
+        isFinite: isFinite(audio.duration),
+        expectedDuration,
+        id: audio.id
       });
       
-      const hasSelection = selectionStart !== null && selectionEnd !== null && selectionStart !== selectionEnd;
-
-      if (hasSelection) {
-        const startTime = Math.min(selectionStart, selectionEnd);
-        console.log('Waveform handleEnded: Looping back to selection start:', startTime);
-        audio.currentTime = startTime;
-        setCurrentTime(startTime);
-        audio.play();
-        return;
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+        console.log('🎛️ WAVEFORM PLAYER: Duration set from loadedmetadata to', audio.duration);
+      } else if (expectedDuration && isFinite(expectedDuration) && expectedDuration > 0) {
+        setDuration(expectedDuration);
+        console.log('🎛️ WAVEFORM PLAYER: Duration set from expectedDuration to', expectedDuration);
       }
-
-      console.log('Waveform handleEnded: No selection, stopping playback');
-      // No selection → normal behavior
-      setIsPlaying(false);
-      audio.currentTime = 0;
-      setCurrentTime(0);
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('durationchange', handleDurationChange);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('ended', handleEnded);
@@ -143,50 +147,139 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('durationchange', handleDurationChange);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [audioUrl, isLoopMode, selectionStart, selectionEnd]);
+  }, [audioUrl]);
 
-  // Player functions
+  // Set duration from expectedDuration if audio duration is not available
+  useEffect(() => {
+    if (expectedDuration && isFinite(expectedDuration) && expectedDuration > 0 && duration === 0) {
+      console.log('🎛️ WAVEFORM PLAYER: Setting duration from expectedDuration', expectedDuration);
+      setDuration(expectedDuration);
+    }
+  }, [expectedDuration, duration]);
+
+  // Add global mouse event listeners for progress bar dragging
+  useEffect(() => {
+    if (isDraggingProgress) {
+      document.addEventListener('mousemove', handleProgressMouseMove);
+      document.addEventListener('mouseup', handleProgressMouseUp);
+      
+      return () => {
+        document.removeEventListener('mousemove', handleProgressMouseMove);
+        document.removeEventListener('mouseup', handleProgressMouseUp);
+      };
+    }
+  }, [isDraggingProgress]);
+
+  // SIMPLE PLAYER FUNCTIONS - MINIMAL VERSION FOR DEBUGGING
   const togglePlayPause = () => {
     const audio = audioRef.current;
-    console.log('togglePlayPause called:', {
-      hasAudio: !!audio,
-      isPlaying,
-      currentTime: audio?.currentTime,
-      duration: audio?.duration,
-      selectionStart,
-      selectionEnd
-    });
-    
     if (!audio) return;
-    
+
+    console.log('🎛️ WAVEFORM PLAYER: togglePlayPause called', {
+      isPlaying,
+      currentTime: audio.currentTime,
+      duration: audio.duration,
+      src: audio.src?.split('/').pop(),
+      id: audio.id
+    });
+
     if (isPlaying) {
-      console.log('Pausing playback');
       audio.pause();
+      setIsPlaying(false);
     } else {
-      console.log('Starting playback');
-      // If playhead is at the end, reset to beginning before playing
-      if (audio.currentTime >= audio.duration - 0.1) {
-        console.log('Playhead at end, resetting to 0');
+      // Check if track has ended (currentTime is at or very close to duration)
+      const isAtEnd = audio.currentTime >= (duration - 0.1); // Use state duration, not audio.duration
+      
+      if (isAtEnd) {
+        console.log('🎛️ WAVEFORM PLAYER: Track ended, restarting from beginning');
         audio.currentTime = 0;
         setCurrentTime(0);
       }
+      
       audio.play().catch(console.error);
+      setIsPlaying(true);
     }
   };
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     const audio = audioRef.current;
-    const total = effectiveDuration || audio?.duration || 0;
-    if (!audio || total === 0) return;
+    
+    // Use state duration instead of audio.duration (which can be Infinity)
+    if (!audio || duration === 0) {
+      console.log('🎛️ WAVEFORM PLAYER: Cannot seek - invalid duration', {
+        duration,
+        audioDuration: audio?.duration,
+        id: audio?.id
+      });
+      return;
+    }
+    
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
     const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
-    const newTime = ratio * total;
+    const newTime = ratio * duration; // Use state duration, not audio.duration
+    
+    console.log('🎛️ WAVEFORM PLAYER: Seeking', {
+      from: audio.currentTime,
+      to: newTime,
+      duration: duration,
+      ratio
+    });
+    
     audio.currentTime = newTime;
     setCurrentTime(newTime);
+  };
+
+  const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    console.log('🎛️ WAVEFORM PLAYER: Mouse down on progress bar', {
+      clientX: e.clientX,
+      isDraggingProgress
+    });
+    setIsDraggingProgress(true);
+    handleSeek(e);
+    
+    // Prevent click event from firing after drag to avoid double-seeking
+    e.preventDefault();
+  };
+
+  const handleProgressMouseMove = (e: MouseEvent) => {
+    if (!isDraggingProgress) return;
+    
+    const audio = audioRef.current;
+    
+    // Use state duration instead of audio.duration
+    if (!audio || duration === 0) return;
+    
+    // Use the ref instead of querySelector
+    const progressBar = progressBarRef.current;
+    if (!progressBar) return;
+    
+    const rect = progressBar.getBoundingClientRect();
+    const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    const newTime = ratio * duration; // Use state duration, not audio.duration
+    
+    console.log('🎛️ WAVEFORM PLAYER: Dragging progress', {
+      from: audio.currentTime,
+      to: newTime,
+      ratio,
+      clientX: e.clientX,
+      rectLeft: rect.left,
+      rectWidth: rect.width
+    });
+    
+    audio.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const handleProgressMouseUp = () => {
+    console.log('🎛️ WAVEFORM PLAYER: Mouse up on progress bar', {
+      isDraggingProgress
+    });
+    setIsDraggingProgress(false);
   };
 
   const handleVolume = (value: number) => {
@@ -234,25 +327,31 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     return 0;
   };
 
-  const effectiveDuration = (() => {
-    // If we have high-res peaks, use their duration (this is the actual processed audio length)
-    const highDur = durationFromPeaks(high);
-    if (highDur > 0) return highDur;
-    
-    // Check if audio duration is valid (not 0, not Infinity, not NaN)
-    if (duration && Number.isFinite(duration) && duration > 0) {
-      return duration;
-    }
-    // Prioritize expected duration over placeholder peaks
-    if (expectedDuration && Number.isFinite(expectedDuration) && expectedDuration > 0) {
-      return expectedDuration;
-    }
-    // Fall back to low-res peaks duration (only if not placeholder)
-    const lowDur = durationFromPeaks(low);
-    if (lowDur > 0 && lowDur > 1) return lowDur; // Ignore placeholder durations < 1 second
-    return 0;
-  })();
+  // EFFECTIVE DURATION CALCULATION - TEMPORARILY DISABLED FOR DEBUGGING
+  // const effectiveDuration = (() => {
+  //   // If we have high-res peaks, use their duration (this is the actual processed audio length)
+  //   const highDur = durationFromPeaks(high);
+  //   if (highDur > 0) return highDur;
+  //   
+  //   // Check if audio duration is valid (not 0, not Infinity, not NaN)
+  //   if (duration && Number.isFinite(duration) && duration > 0) {
+  //     return duration;
+  //   }
+  //   // Prioritize expected duration over placeholder peaks
+  //   if (expectedDuration && Number.isFinite(expectedDuration) && expectedDuration > 0) {
+  //     return expectedDuration;
+  //   }
+  //   // Fall back to low-res peaks duration (only if not placeholder)
+  //   const lowDur = durationFromPeaks(low);
+  //   if (lowDur > 0 && lowDur > 1) return lowDur; // Ignore placeholder durations < 1 second
+  //   return 0;
+  // })();
+  
+  // Use simple duration for debugging
+  const effectiveDuration = duration;
 
+  // CANVAS WAVEFORM RENDERER - TEMPORARILY DISABLED FOR DEBUGGING
+  /*
   // Canvas waveform renderer (peaks + playhead + selection)
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -403,7 +502,10 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
     raf = requestAnimationFrame(render);
     return () => cancelAnimationFrame(raf);
   }, [currentTime, effectiveDuration, displayPeaks, selectionStart, selectionEnd, zoomLevel, zoomCenter, hoveredHandle, dragMode, isLoopMode]);
+  */
 
+  // PEAKS AND COMPLEX LOGIC - TEMPORARILY DISABLED FOR DEBUGGING
+  /*
   // Start peaks job when audioUrl changes
   useEffect(() => {
     let cancelled = false;
@@ -712,19 +814,14 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
       canvas.removeEventListener('mousemove', onMouseMove);
     };
   }, [effectiveDuration, isDragging, selectionStart, zoomLevel, zoomCenter, dragMode, hoveredHandle]);
+  */
 
   return (
     <div className="space-y-4">
-      {/* Canvas waveform placeholder */}
-      <div className="bg-transparent rounded p-2 select-none">
-        <canvas 
-          ref={canvasRef} 
-          style={{ 
-            width: '100%', 
-            height: 150,
-            cursor: hoveredHandle ? 'ew-resize' : 'default'
-          }} 
-        />
+      {/* Simple placeholder - NO CANVAS FOR DEBUGGING */}
+      <div className="bg-gray-100 rounded p-4 text-center text-gray-500">
+        <p>Simple Audio Player - No Waveform</p>
+        <p className="text-sm">Canvas rendering disabled for debugging</p>
       </div>
       
       {/* Custom Player Controls */}
@@ -746,13 +843,15 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         
         <div className="flex-1 mx-6">
           <div 
-            className="rounded-full h-2 bg-gray-200 cursor-pointer relative" 
+            ref={progressBarRef}
+            className="rounded-full h-2 bg-gray-200 cursor-pointer relative progress-bar-container" 
             onClick={handleSeek}
+            onMouseDown={handleProgressMouseDown}
           >
-            <div 
-              className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
-              style={{ width: `${effectiveDuration ? (currentTime / effectiveDuration) * 100 : 0}%` }}
-            >
+              <div 
+                className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
+                style={{ width: `${duration && isFinite(duration) && duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+              >
               {/* Slide switch handle */}
               <div 
                 className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
@@ -765,9 +864,9 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
           </div>
         </div>
         
-        <span className="text-gray-600 text-sm min-w-[80px] text-right">
-          {formatTime(currentTime)} / {formatTime(effectiveDuration)}
-        </span>
+          <span className="text-gray-600 text-sm min-w-[80px] text-right">
+            {formatTime(currentTime)} / {isFinite(duration) && duration > 0 ? formatTime(duration) : 'Loading...'}
+          </span>
 
         {/* Volume */}
         <div className="flex items-center gap-2 w-40">
@@ -840,6 +939,7 @@ const Waveform: React.FC<Props> = ({ audioUrl, selection, onSelectionChange, onW
         className="hidden" 
         preload="auto"
         crossOrigin="anonymous"
+        id="waveform-player-audio"
       />
     </div>
   );
