@@ -13,6 +13,32 @@ const app = express();
 app.use(cors({ origin: [/^http:\/\/localhost:\d+$/] }));
 app.use(express.json());
 
+// MAIN BRANCH FORMAT SELECTION FUNCTION
+const pickBestProgressiveAudio = (info) => {
+  const formats = Array.isArray(info?.formats) ? info.formats : [];
+  console.log('Total formats available:', formats.length);
+  const candidates = formats.filter((f) => {
+    const hasAudio = f.acodec && f.acodec !== 'none';
+    const noVideo = !f.vcodec || f.vcodec === 'none';
+    const url = f.url || '';
+    const protocol = (f.protocol || '').toLowerCase();
+    const ext = (f.ext || '').toLowerCase();
+    const isSegmented = protocol.includes('m3u8') || protocol.includes('dash') || url.includes('.m3u8') || url.includes('manifest');
+    const isProgressive = !isSegmented && (protocol.startsWith('http') || protocol === 'https');
+    const isHLS = protocol.includes('m3u8') || url.includes('.m3u8');
+    const isPlayableExt = ['mp3', 'm4a', 'webm', 'ogg'].includes(ext);
+    // Accept both progressive downloads and HLS streams (like SoundCloud)
+    const result = hasAudio && noVideo && url && (isProgressive || isHLS) && (isPlayableExt || true);
+    if (result) {
+      console.log('Found candidate format:', f.format_id, f.acodec, f.vcodec, f.ext, f.protocol);
+    }
+    return result;
+  });
+  console.log('Candidates found:', candidates.length);
+  const sorted = candidates.sort((a, b) => (Number(b.abr || 0) - Number(a.abr || 0)));
+  return sorted[0] || candidates[0];
+};
+
 // Streaming single segment extraction (no temp files, no browser download)
 const handleSingleSegmentExtraction = async (req, res, url, startTime, endTime, format) => {
   try {
@@ -112,30 +138,6 @@ const handleSingleSegmentExtraction = async (req, res, url, startTime, endTime, 
       res.status(500).json({ error: 'Audio processing failed', details: error.message });
     }
   }
-};
-const pickBestProgressiveAudio = (info) => {
-  const formats = Array.isArray(info?.formats) ? info.formats : [];
-  console.log('Total formats available:', formats.length);
-  const candidates = formats.filter((f) => {
-    const hasAudio = f.acodec && f.acodec !== 'none';
-    const noVideo = !f.vcodec || f.vcodec === 'none';
-    const url = f.url || '';
-    const protocol = (f.protocol || '').toLowerCase();
-    const ext = (f.ext || '').toLowerCase();
-    const isSegmented = protocol.includes('m3u8') || protocol.includes('dash') || url.includes('.m3u8') || url.includes('manifest');
-    const isProgressive = !isSegmented && (protocol.startsWith('http') || protocol === 'https');
-    const isHLS = protocol.includes('m3u8') || url.includes('.m3u8');
-    const isPlayableExt = ['mp3', 'm4a', 'webm', 'ogg'].includes(ext);
-    // Accept both progressive downloads and HLS streams (like SoundCloud)
-    const result = hasAudio && noVideo && url && (isProgressive || isHLS) && (isPlayableExt || true);
-    if (result) {
-      console.log('Found candidate format:', f.format_id, f.acodec, f.vcodec, f.ext, f.protocol);
-    }
-    return result;
-  });
-  console.log('Candidates found:', candidates.length);
-  const sorted = candidates.sort((a, b) => (Number(b.abr || 0) - Number(a.abr || 0)));
-  return sorted[0] || candidates[0];
 };
 
 const probeDurationWithFfprobe = async (url) => {
@@ -336,236 +338,9 @@ app.get('/stream', async (req, res) => {
   }
   
   try {
-    // Handle YouTube URLs FIRST by redirecting to Python backend
-    if (sourceUrl.includes('youtube.com') || sourceUrl.includes('youtu.be')) {
-      console.log('🎵 YOUTUBE URL DETECTED - calling Python backend:', sourceUrl);
-      
-      try {
-        console.log('🎵 CALLING PYTHON BACKEND:', 'http://localhost:5000/metadata');
-        console.log('🎵 REQUEST BODY:', JSON.stringify({ url: sourceUrl }));
-        
-        // Get the direct audio URL from Python backend
-        const pythonResponse = await fetch('http://localhost:5000/metadata', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ url: sourceUrl })
-        });
-        
-        console.log('🎵 PYTHON RESPONSE STATUS:', pythonResponse.status);
-        console.log('🎵 PYTHON RESPONSE OK:', pythonResponse.ok);
-        
-        if (!pythonResponse.ok) {
-          console.log('❌ PYTHON BACKEND ERROR:', pythonResponse.status);
-          throw new Error(`Python backend error: ${pythonResponse.status}`);
-        }
-        
-        const metadata = await pythonResponse.json();
-        console.log('🎵 PYTHON METADATA RECEIVED:', {
-          hasDirectAudioUrl: !!metadata.direct_audio_url,
-          directAudioUrlLength: metadata.direct_audio_url?.length || 0,
-          title: metadata.title,
-          duration: metadata.duration
-        });
-        
-        if (metadata.direct_audio_url) {
-          console.log('🎵 STARTING YT-DLP PROCESS for URL:', sourceUrl);
-          
-          // First, let's see what formats are available
-          console.log('🎵 CHECKING AVAILABLE FORMATS...');
-          const listFormatsProcess = spawn('yt-dlp', [
-            '--no-warnings',
-            '--no-check-certificates',
-            '--extractor-args', 'youtube:player_client=android',
-            '--list-formats',
-            sourceUrl
-          ], {
-            stdio: ['ignore', 'pipe', 'pipe']
-          });
-          
-          let formatsOutput = '';
-          listFormatsProcess.stdout.on('data', (data) => {
-            formatsOutput += data.toString();
-          });
-          
-          listFormatsProcess.on('close', (code) => {
-            console.log('🎵 AVAILABLE FORMATS:');
-            console.log(formatsOutput);
-            
-            // Check if we have audio-only formats, otherwise use video format with audio extraction
-            let selectedFormat = 'bestaudio';
-            if (formatsOutput.includes('mp4a.40.2') && !formatsOutput.includes('audio only')) {
-              // No pure audio formats, use video format and extract audio only
-              selectedFormat = '18';
-              console.log('🎵 NO PURE AUDIO FORMATS - using video format 18 and extracting audio only');
-            } else {
-              console.log('🎵 USING PURE AUDIO FORMAT');
-            }
-            
-            console.log('🎵 STARTING DOWNLOAD with format:', selectedFormat);
-            
-            // Build command arguments
-            const ytdlpArgs = [
-              '--no-warnings',
-              '--no-check-certificates',
-              '--prefer-free-formats',
-              '--no-playlist',
-              '--format', selectedFormat,
-              '--extractor-args', 'youtube:player_client=android',
-              '--add-header', `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
-              '--add-header', `Referer: ${sourceUrl}`,
-              '--output', '-',
-              sourceUrl
-            ];
-            
-            console.log('🎵 FINAL YT-DLP COMMAND:', ytdlpArgs);
-            
-            // If using video format, pipe through ffmpeg to extract audio
-            if (selectedFormat === '18') {
-              console.log('🎵 USING FFMPEG TO EXTRACT AUDIO FROM VIDEO');
-              
-              // First get the video stream with yt-dlp
-              const ytdlpProcess = spawn('yt-dlp', ytdlpArgs, {
-                stdio: ['ignore', 'pipe', 'pipe']
-              });
-              
-              // Then pipe through ffmpeg to extract audio
-              const ffmpegProcess = spawn('ffmpeg', [
-                '-i', 'pipe:0',  // Input from stdin (yt-dlp output)
-                '-vn',           // No video
-                '-acodec', 'libmp3lame',  // MP3 audio codec
-                '-ab', '128k',   // Audio bitrate
-                '-f', 'mp3',     // Output format
-                'pipe:1'         // Output to stdout
-              ], {
-                stdio: ['pipe', 'pipe', 'pipe']
-              });
-              
-              // Connect yt-dlp output to ffmpeg input
-              ytdlpProcess.stdout.pipe(ffmpegProcess.stdin);
-              
-              // Use ffmpeg output for streaming
-              const audioProcess = ffmpegProcess;
-              
-              console.log('🎵 YT-DLP PROCESS STARTED with PID:', ytdlpProcess.pid);
-              console.log('🎵 FFMPEG PROCESS STARTED with PID:', ffmpegProcess.pid);
-              
-            } else {
-              // Pure audio format, use yt-dlp directly
-              const audioProcess = spawn('yt-dlp', ytdlpArgs, {
-                stdio: ['ignore', 'pipe', 'pipe']
-              });
-              
-              console.log('🎵 YT-DLP PROCESS STARTED with PID:', audioProcess.pid);
-            }
-            
-            // Set headers for audio streaming
-            res.setHeader('Content-Type', 'audio/mpeg');
-            res.setHeader('Cache-Control', 'no-store');
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Timing-Allow-Origin', '*');
-            res.setHeader('Content-Disposition', 'inline; filename="stream.mp3"');
-            res.setHeader('Accept-Ranges', 'bytes');
-            res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-
-            // Handle audio process with proper error handling
-            let hasData = false;
-            let timeoutId;
-
-            // Set a timeout to detect if no data is received
-            timeoutId = setTimeout(() => {
-              if (!hasData && !res.headersSent) {
-                console.error('🎵 AUDIO STREAMING TIMEOUT - no data received');
-                audioProcess.kill();
-                res.status(500).json({ error: 'Audio streaming timeout' });
-              }
-            }, 20000); // 20 second timeout (longer for ffmpeg processing)
-
-            audioProcess.stdout.on('data', (data) => {
-              console.log('🎵 AUDIO STREAM DATA:', data.length, 'bytes');
-              hasData = true;
-              clearTimeout(timeoutId);
-              if (!res.headersSent) {
-                console.log('🎵 SENDING 200 STATUS');
-                res.status(200);
-              }
-              res.write(data);
-            });
-
-            audioProcess.stdout.on('end', () => {
-              console.log('🎵 AUDIO STREAM ENDED');
-              clearTimeout(timeoutId);
-              if (!res.headersSent) {
-                console.log('🎵 SENDING 200 STATUS (end)');
-                res.status(200);
-              }
-              res.end();
-            });
-            
-            audioProcess.stderr.on('data', (data) => {
-              console.error('🎵 AUDIO PROCESS STDERR:', data.toString());
-            });
-
-            audioProcess.on('error', (error) => {
-              console.error('🎵 AUDIO PROCESS ERROR:', error);
-              clearTimeout(timeoutId);
-              if (!res.headersSent) {
-                res.status(500).json({ error: 'Audio streaming failed' });
-              }
-            });
-
-            audioProcess.on('close', (code) => {
-              console.log('🎵 AUDIO PROCESS CLOSED with code:', code);
-              clearTimeout(timeoutId);
-              if (code !== 0) {
-                console.error('🎵 AUDIO PROCESS FAILED with code:', code);
-                if (!res.headersSent) {
-                  res.status(500).json({ error: 'Audio streaming failed' });
-                }
-              } else if (!hasData) {
-                console.error('🎵 AUDIO PROCESS COMPLETED BUT NO DATA RECEIVED');
-                if (!res.headersSent) {
-                  res.status(500).json({ error: 'No audio data received' });
-                }
-              } else {
-                console.log('🎵 AUDIO PROCESS COMPLETED SUCCESSFULLY');
-              }
-            });
-
-            // Handle client disconnect
-            req.on('close', () => {
-              clearTimeout(timeoutId);
-              audioProcess.kill();
-            });
-          });
-          
-          listFormatsProcess.stderr.on('data', (data) => {
-            console.error('🎵 LIST-FORMATS STDERR:', data.toString());
-          });
-          
-          listFormatsProcess.on('error', (error) => {
-            console.error('🎵 LIST-FORMATS ERROR:', error);
-            // If listing formats fails, try direct download anyway
-            console.log('🎵 FALLBACK: Starting download without format check');
-            // ... (fallback code would go here)
-          });
-
-          return; // Exit early since we handled the YouTube URL
-        } else {
-          console.log('❌ NO DIRECT AUDIO URL FROM PYTHON BACKEND');
-          throw new Error('No direct audio URL from Python backend');
-        }
-      } catch (error) {
-        console.error('❌ PYTHON BACKEND STREAMING FAILED:', error.message);
-        console.error('❌ ERROR STACK:', error.stack);
-        res.status(500).json({ error: 'Unable to resolve media URL' });
-        return;
-      }
-    }
-
+    // MAIN BRANCH APPROACH: Use yt-dlp directly in Node.js (NO Python backend)
     // Check if this is already a direct media URL (from /resolve endpoint)
-    const isDirectUrl = sourceUrl.includes('soundcloud.com') || 
+    const isDirectUrl = sourceUrl.includes('googlevideo.com') || 
                        sourceUrl.includes('.mp3') || 
                        sourceUrl.includes('.m4a') ||
                        sourceUrl.includes('.webm') ||
@@ -577,7 +352,7 @@ app.get('/stream', async (req, res) => {
       console.log('Using direct URL:', sourceUrl);
       directUrl = sourceUrl;
     } else {
-      // Resolve to a direct audio URL first
+      // Resolve to a direct audio URL first - MAIN BRANCH APPROACH
       try {
         const jsonStr = await youtubedl(sourceUrl, {
         dumpSingleJson: true,
@@ -585,8 +360,6 @@ app.get('/stream', async (req, res) => {
         noCheckCertificates: true,
         preferFreeFormats: true,
         noPlaylist: true,
-        f: 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio',
-        extractorArgs: 'youtube:player_client=android',
         addHeader: [
           `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
           `Referer: ${sourceUrl}`,
@@ -608,9 +381,8 @@ app.get('/stream', async (req, res) => {
     if (!directUrl) {
       try {
         const stdout = await youtubedl(sourceUrl, {
-          f: 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio[ext=webm]/bestaudio',
+          f: 'bestaudio',
           g: true,
-          extractorArgs: 'youtube:player_client=android',
           addHeader: [
             `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
             `Referer: ${sourceUrl}`,
@@ -620,9 +392,6 @@ app.get('/stream', async (req, res) => {
       } catch (err) {
         console.error('yt-dlp stdout parsing failed:', err.message);
       }
-    }
-    if (!directUrl) {
-      return res.status(422).json({ error: 'Unable to resolve media URL' });
     }
 
     // If segmented (HLS/DASH), transcode to progressive MP3 via ffmpeg

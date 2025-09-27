@@ -79,9 +79,8 @@ export class AudioService {
       const metadata = await this.extractMetadata(url);
       
       if (metadata) {
-        // Prefer backend-provided direct URL; otherwise proxy original via Node server
-        const resolved = metadata.direct_audio_url ?? url;
-        const streamUrl = `${this.NODE_STREAM_URL}/stream?url=${encodeURIComponent(resolved)}`;
+        // Always use original URL for streaming - server will extract direct URL internally
+        const streamUrl = `${this.NODE_STREAM_URL}/stream?url=${encodeURIComponent(url)}`;
         
         const result: AudioResolutionResult = { 
           url: streamUrl, 

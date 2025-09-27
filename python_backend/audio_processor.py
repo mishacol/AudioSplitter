@@ -24,6 +24,15 @@ import yt_dlp
 app = Flask(__name__)
 CORS(app)
 
+# Add request logging middleware
+@app.before_request
+def log_request_info():
+    print(f"🎵 PYTHON BACKEND: Incoming request: {request.method} {request.path}")
+    if request.method == 'POST' and request.is_json:
+        data = request.get_json()
+        if 'url' in data:
+            print(f"🎵 PYTHON BACKEND: Request URL: {data['url']}")
+
 class AudioProcessor:
     def __init__(self):
         self.temp_dir = tempfile.mkdtemp()
@@ -200,8 +209,10 @@ def extract_metadata():
         if not url:
             return jsonify({'error': 'No URL provided'}), 400
         
-        print(f"Fetching metadata for URL: {url}")  # Debug log
+        print(f"🎵 PYTHON BACKEND: Starting metadata extraction for URL: {url}")
+        print(f"🎵 PYTHON BACKEND: Request data: {data}")
         
+        # Use the EXACT same options that work on main branch
         ydl_opts = {
             'quiet': False,  # Enable verbose for logs
             'no_warnings': False,
@@ -209,22 +220,30 @@ def extract_metadata():
             'skip_download': True,
             'sleep_interval': 1,  # Avoid rate limits
             'max_sleep_interval': 5,
-            'extractor_args': {
-                'youtube': [
-                    'skip=hls,no_check_certificate'  # Skip HLS and cert issues
-                ]
-            },
+            # REMOVED extractor_args - use default web client like main branch
             'format': 'bestaudio[ext=m4a]/bestaudio/best',  # Prefer M4A audio
             'noplaylist': True,  # Only extract first video, not entire playlist
         }
         
+        print(f"🎵 PYTHON BACKEND: yt-dlp options: {ydl_opts}")
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            print(f"🎵 PYTHON BACKEND: Starting yt-dlp extraction...")
             info = ydl.extract_info(url, download=False)
-            print(f"Raw info keys: {list(info.keys()) if info else 'None'}")  # Debug: Check extracted fields
+            print(f"🎵 PYTHON BACKEND: yt-dlp extraction completed")
+            print(f"🎵 PYTHON BACKEND: Raw info keys: {list(info.keys()) if info else 'None'}")
+            
+            if info and 'formats' in info:
+                print(f"🎵 PYTHON BACKEND: Total formats available: {len(info['formats'])}")
+                # Use the EXACT same format selection logic as main branch
+                audio_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
+                print(f"🎵 PYTHON BACKEND: Audio-only formats found: {len(audio_formats)}")
+                for i, fmt in enumerate(audio_formats[:5]):  # Show first 5
+                    print(f"🎵 PYTHON BACKEND: Format {i+1}: ID={fmt.get('format_id')}, ext={fmt.get('ext')}, abr={fmt.get('abr')}, url_length={len(fmt.get('url', ''))}")
             
             if 'entries' in info and info['entries']:
                 entry = info['entries'][0]  # Take first for radio/playlist
-                print(f"Using entry[0]: {entry.get('title', 'No title')}")  # Debug
+                print(f"🎵 PYTHON BACKEND: Using entry[0]: {entry.get('title', 'No title')}")
                 info = entry
             
             # Enhanced field extraction
@@ -246,14 +265,23 @@ def extract_metadata():
                 'release_year': info.get('release_year', None)
             }
             
-            # Try to get direct audio URL from formats
+            print(f"🎵 PYTHON BACKEND: Basic metadata extracted: title='{metadata['title']}', duration={metadata['duration']}, author='{metadata['author']}'")
+            
+            # Try to get direct audio URL from formats - EXACT same logic as main branch
             if 'formats' in info:
                 audio_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
                 if audio_formats:
-                    best_audio = max(audio_formats, key=lambda f: f.get('abr', 0))  # Highest bitrate
+                    # Sort by bitrate (highest first) - EXACT same as main branch
+                    best_audio = max(audio_formats, key=lambda f: f.get('abr', 0))
                     metadata['direct_audio_url'] = best_audio.get('url')
                     metadata['format'] = best_audio.get('ext', metadata['format'])
-                    print(f"Selected audio format: {metadata['format']}")  # Debug
+                    print(f"🎵 PYTHON BACKEND: Selected best audio format: ID={best_audio.get('format_id')}, ext={best_audio.get('ext')}, abr={best_audio.get('abr')}")
+                    print(f"🎵 PYTHON BACKEND: Direct audio URL length: {len(metadata['direct_audio_url']) if metadata['direct_audio_url'] else 0}")
+                else:
+                    print(f"🎵 PYTHON BACKEND: No audio-only formats found, checking all formats...")
+                    all_formats = info['formats']
+                    for fmt in all_formats[:3]:  # Show first 3 formats
+                        print(f"🎵 PYTHON BACKEND: Format: ID={fmt.get('format_id')}, acodec={fmt.get('acodec')}, vcodec={fmt.get('vcodec')}, ext={fmt.get('ext')}")
             
             # Format file size if available
             if metadata['filesize_bytes']:
@@ -287,12 +315,17 @@ def extract_metadata():
             else:
                 metadata['release_date_formatted'] = 'Unknown'
             
-            print(f"Final metadata: {json.dumps(metadata, indent=2)}")  # Debug log
+            print(f"🎵 PYTHON BACKEND: Final metadata prepared successfully")
+            print(f"🎵 PYTHON BACKEND: Has direct_audio_url: {bool(metadata['direct_audio_url'])}")
+            print(f"🎵 PYTHON BACKEND: Direct audio URL preview: {metadata['direct_audio_url'][:100] if metadata['direct_audio_url'] else 'None'}...")
             return jsonify(metadata)
             
     except Exception as e:
         error_msg = f'Failed to fetch metadata: {str(e)}. Try updating yt-dlp or checking URL access.'
-        print(f"ERROR: {error_msg}")  # Log error
+        print(f"🎵 PYTHON BACKEND: ERROR: {error_msg}")
+        print(f"🎵 PYTHON BACKEND: Exception type: {type(e).__name__}")
+        import traceback
+        print(f"🎵 PYTHON BACKEND: Traceback: {traceback.format_exc()}")
         return jsonify({'error': error_msg}), 500
 
 @app.route('/process-audio', methods=['POST'])
@@ -379,4 +412,12 @@ def download_segment(filename):
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    print("🎵 PYTHON BACKEND: Starting Audio Processor API...")
+    print("🎵 PYTHON BACKEND: Server will run on http://localhost:5000")
+    print("🎵 PYTHON BACKEND: Available endpoints:")
+    print("🎵 PYTHON BACKEND:   POST /metadata - Extract metadata from URL")
+    print("🎵 PYTHON BACKEND:   POST /process-audio - Process audio and generate waveform")
+    print("🎵 PYTHON BACKEND:   POST /split-audio - Split audio at specified points")
+    print("🎵 PYTHON BACKEND:   GET /download-segment/<filename> - Download audio segment")
+    print("🎵 PYTHON BACKEND: Using main branch yt-dlp configuration for YouTube extraction")
     app.run(host='0.0.0.0', port=5000, debug=True)
