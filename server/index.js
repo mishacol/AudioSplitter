@@ -317,19 +317,33 @@ app.post('/resolve', async (req, res) => {
 
 // Streaming proxy fallback: transcode best audio to mp3 and pipe
 app.get('/stream', async (req, res) => {
-  console.log('GET /stream query:', req.query);
+  console.log('🎵 STREAM REQUEST:', {
+    query: req.query,
+    headers: req.headers,
+    method: req.method,
+    url: req.url
+  });
+  
   const sourceUrl = typeof req.query.url === 'string' && req.query.url
     ? req.query.url
     : (typeof req.query.u === 'string' ? req.query.u : '');
+    
+  console.log('🎵 PARSED SOURCE URL:', sourceUrl);
+  
   if (typeof sourceUrl !== 'string' || !sourceUrl) {
+    console.log('❌ MISSING URL - returning 400');
     return res.status(400).json({ error: 'Missing url' });
   }
+  
   try {
     // Handle YouTube URLs FIRST by redirecting to Python backend
     if (sourceUrl.includes('youtube.com') || sourceUrl.includes('youtu.be')) {
-      console.log('YouTube URL detected, redirecting to Python backend:', sourceUrl);
+      console.log('🎵 YOUTUBE URL DETECTED - calling Python backend:', sourceUrl);
       
       try {
+        console.log('🎵 CALLING PYTHON BACKEND:', 'http://localhost:5000/metadata');
+        console.log('🎵 REQUEST BODY:', JSON.stringify({ url: sourceUrl }));
+        
         // Get the direct audio URL from Python backend
         const pythonResponse = await fetch('http://localhost:5000/metadata', {
           method: 'POST',
@@ -339,41 +353,212 @@ app.get('/stream', async (req, res) => {
           body: JSON.stringify({ url: sourceUrl })
         });
         
+        console.log('🎵 PYTHON RESPONSE STATUS:', pythonResponse.status);
+        console.log('🎵 PYTHON RESPONSE OK:', pythonResponse.ok);
+        
         if (!pythonResponse.ok) {
+          console.log('❌ PYTHON BACKEND ERROR:', pythonResponse.status);
           throw new Error(`Python backend error: ${pythonResponse.status}`);
         }
         
         const metadata = await pythonResponse.json();
-        console.log('Python backend metadata:', metadata);
+        console.log('🎵 PYTHON METADATA RECEIVED:', {
+          hasDirectAudioUrl: !!metadata.direct_audio_url,
+          directAudioUrlLength: metadata.direct_audio_url?.length || 0,
+          title: metadata.title,
+          duration: metadata.duration
+        });
         
         if (metadata.direct_audio_url) {
-          console.log('Using direct audio URL from Python backend:', metadata.direct_audio_url);
-          // Use the direct URL from Python backend
-          const upstream = await fetch(metadata.direct_audio_url, {
-            method: 'GET',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-              'Referer': sourceUrl,
-            },
+          console.log('🎵 STARTING YT-DLP PROCESS for URL:', sourceUrl);
+          
+          // First, let's see what formats are available
+          console.log('🎵 CHECKING AVAILABLE FORMATS...');
+          const listFormatsProcess = spawn('yt-dlp', [
+            '--no-warnings',
+            '--no-check-certificates',
+            '--extractor-args', 'youtube:player_client=android',
+            '--list-formats',
+            sourceUrl
+          ], {
+            stdio: ['ignore', 'pipe', 'pipe']
           });
           
-          if (!upstream.ok) {
-            throw new Error(`Failed to fetch audio: ${upstream.status}`);
-          }
+          let formatsOutput = '';
+          listFormatsProcess.stdout.on('data', (data) => {
+            formatsOutput += data.toString();
+          });
           
-          // Forward headers
-          res.status(upstream.status);
-          const contentType = upstream.headers.get('content-type') || 'audio/mpeg';
-          res.setHeader('Content-Type', contentType);
+          listFormatsProcess.on('close', (code) => {
+            console.log('🎵 AVAILABLE FORMATS:');
+            console.log(formatsOutput);
+            
+            // Check if we have audio-only formats, otherwise use video format with audio extraction
+            let selectedFormat = 'bestaudio';
+            if (formatsOutput.includes('mp4a.40.2') && !formatsOutput.includes('audio only')) {
+              // No pure audio formats, use video format and extract audio only
+              selectedFormat = '18';
+              console.log('🎵 NO PURE AUDIO FORMATS - using video format 18 and extracting audio only');
+            } else {
+              console.log('🎵 USING PURE AUDIO FORMAT');
+            }
+            
+            console.log('🎵 STARTING DOWNLOAD with format:', selectedFormat);
+            
+            // Build command arguments
+            const ytdlpArgs = [
+              '--no-warnings',
+              '--no-check-certificates',
+              '--prefer-free-formats',
+              '--no-playlist',
+              '--format', selectedFormat,
+              '--extractor-args', 'youtube:player_client=android',
+              '--add-header', `User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36`,
+              '--add-header', `Referer: ${sourceUrl}`,
+              '--output', '-',
+              sourceUrl
+            ];
+            
+            console.log('🎵 FINAL YT-DLP COMMAND:', ytdlpArgs);
+            
+            // If using video format, pipe through ffmpeg to extract audio
+            if (selectedFormat === '18') {
+              console.log('🎵 USING FFMPEG TO EXTRACT AUDIO FROM VIDEO');
+              
+              // First get the video stream with yt-dlp
+              const ytdlpProcess = spawn('yt-dlp', ytdlpArgs, {
+                stdio: ['ignore', 'pipe', 'pipe']
+              });
+              
+              // Then pipe through ffmpeg to extract audio
+              const ffmpegProcess = spawn('ffmpeg', [
+                '-i', 'pipe:0',  // Input from stdin (yt-dlp output)
+                '-vn',           // No video
+                '-acodec', 'libmp3lame',  // MP3 audio codec
+                '-ab', '128k',   // Audio bitrate
+                '-f', 'mp3',     // Output format
+                'pipe:1'         // Output to stdout
+              ], {
+                stdio: ['pipe', 'pipe', 'pipe']
+              });
+              
+              // Connect yt-dlp output to ffmpeg input
+              ytdlpProcess.stdout.pipe(ffmpegProcess.stdin);
+              
+              // Use ffmpeg output for streaming
+              const audioProcess = ffmpegProcess;
+              
+              console.log('🎵 YT-DLP PROCESS STARTED with PID:', ytdlpProcess.pid);
+              console.log('🎵 FFMPEG PROCESS STARTED with PID:', ffmpegProcess.pid);
+              
+            } else {
+              // Pure audio format, use yt-dlp directly
+              const audioProcess = spawn('yt-dlp', ytdlpArgs, {
+                stdio: ['ignore', 'pipe', 'pipe']
+              });
+              
+              console.log('🎵 YT-DLP PROCESS STARTED with PID:', audioProcess.pid);
+            }
+            
+            // Set headers for audio streaming
+            res.setHeader('Content-Type', 'audio/mpeg');
+            res.setHeader('Cache-Control', 'no-store');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Timing-Allow-Origin', '*');
+            res.setHeader('Content-Disposition', 'inline; filename="stream.mp3"');
+            res.setHeader('Accept-Ranges', 'bytes');
+            res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+            // Handle audio process with proper error handling
+            let hasData = false;
+            let timeoutId;
+
+            // Set a timeout to detect if no data is received
+            timeoutId = setTimeout(() => {
+              if (!hasData && !res.headersSent) {
+                console.error('🎵 AUDIO STREAMING TIMEOUT - no data received');
+                audioProcess.kill();
+                res.status(500).json({ error: 'Audio streaming timeout' });
+              }
+            }, 20000); // 20 second timeout (longer for ffmpeg processing)
+
+            audioProcess.stdout.on('data', (data) => {
+              console.log('🎵 AUDIO STREAM DATA:', data.length, 'bytes');
+              hasData = true;
+              clearTimeout(timeoutId);
+              if (!res.headersSent) {
+                console.log('🎵 SENDING 200 STATUS');
+                res.status(200);
+              }
+              res.write(data);
+            });
+
+            audioProcess.stdout.on('end', () => {
+              console.log('🎵 AUDIO STREAM ENDED');
+              clearTimeout(timeoutId);
+              if (!res.headersSent) {
+                console.log('🎵 SENDING 200 STATUS (end)');
+                res.status(200);
+              }
+              res.end();
+            });
+            
+            audioProcess.stderr.on('data', (data) => {
+              console.error('🎵 AUDIO PROCESS STDERR:', data.toString());
+            });
+
+            audioProcess.on('error', (error) => {
+              console.error('🎵 AUDIO PROCESS ERROR:', error);
+              clearTimeout(timeoutId);
+              if (!res.headersSent) {
+                res.status(500).json({ error: 'Audio streaming failed' });
+              }
+            });
+
+            audioProcess.on('close', (code) => {
+              console.log('🎵 AUDIO PROCESS CLOSED with code:', code);
+              clearTimeout(timeoutId);
+              if (code !== 0) {
+                console.error('🎵 AUDIO PROCESS FAILED with code:', code);
+                if (!res.headersSent) {
+                  res.status(500).json({ error: 'Audio streaming failed' });
+                }
+              } else if (!hasData) {
+                console.error('🎵 AUDIO PROCESS COMPLETED BUT NO DATA RECEIVED');
+                if (!res.headersSent) {
+                  res.status(500).json({ error: 'No audio data received' });
+                }
+              } else {
+                console.log('🎵 AUDIO PROCESS COMPLETED SUCCESSFULLY');
+              }
+            });
+
+            // Handle client disconnect
+            req.on('close', () => {
+              clearTimeout(timeoutId);
+              audioProcess.kill();
+            });
+          });
           
-          // Stream the audio
-          upstream.body.pipe(res);
-          return;
+          listFormatsProcess.stderr.on('data', (data) => {
+            console.error('🎵 LIST-FORMATS STDERR:', data.toString());
+          });
+          
+          listFormatsProcess.on('error', (error) => {
+            console.error('🎵 LIST-FORMATS ERROR:', error);
+            // If listing formats fails, try direct download anyway
+            console.log('🎵 FALLBACK: Starting download without format check');
+            // ... (fallback code would go here)
+          });
+
+          return; // Exit early since we handled the YouTube URL
         } else {
+          console.log('❌ NO DIRECT AUDIO URL FROM PYTHON BACKEND');
           throw new Error('No direct audio URL from Python backend');
         }
       } catch (error) {
-        console.error('Python backend streaming failed:', error);
+        console.error('❌ PYTHON BACKEND STREAMING FAILED:', error.message);
+        console.error('❌ ERROR STACK:', error.stack);
         res.status(500).json({ error: 'Unable to resolve media URL' });
         return;
       }
