@@ -6,6 +6,7 @@ import { Download, Wand2, Scissors, Loader2, ArrowLeft } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from '@/components/ui/use-toast';
 import ManualSplitEditor from './ManualSplitEditor';
+import WaveSurfer from 'wavesurfer.js';
 import { AudioService } from '@/services';
 
 // TypeScript declarations for File System Access API
@@ -41,7 +42,9 @@ const AudioProcessor: React.FC = () => {
   const [duration, setDuration] = useState(0);
   const [showPulse, setShowPulse] = useState(true);
   const [audioLoading, setAudioLoading] = useState(false);
+  const [waveformReady, setWaveformReady] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const wavesurferRef = useRef<WaveSurfer | null>(null);
   const [hasTriedStreamFallback, setHasTriedStreamFallback] = useState(false);
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
   const [volume, setVolume] = useState(0.25);
@@ -168,6 +171,100 @@ const AudioProcessor: React.FC = () => {
     
     resolveUrl();
   }, [audioUrl]);
+
+  // Initialize Wavesurfer when audio is ready - Working Implementation
+  useEffect(() => {
+    if (!resolvedAudioUrl || !audioFetched) return;
+
+    // Reset waveform ready state when loading new audio
+    setWaveformReady(false);
+
+    const initWavesurfer = () => {
+      const container = document.getElementById('preview-wavesurfer-container');
+      console.log('🎵 WAVESURFER PREVIEW: Checking for container...', container);
+      
+      if (!container) {
+        console.log('🎵 WAVESURFER PREVIEW: No container yet, skipping initialization');
+        setTimeout(initWavesurfer, 100);
+        return;
+      }
+
+      console.log('🎵 WAVESURFER PREVIEW: Initializing Wavesurfer...');
+
+      // Destroy existing instance
+      if (wavesurferRef.current) {
+        wavesurferRef.current.destroy();
+        wavesurferRef.current = null;
+      }
+
+      // Create Wavesurfer instance - Fast Loading Configuration
+      const wavesurfer = WaveSurfer.create({
+        container,
+        waveColor: '#e5e7eb',
+        progressColor: '#374151',
+        cursorColor: '#6b7280',
+        barWidth: 3, // Slightly thicker bars for faster rendering
+        barRadius: 2,
+        height: 120,
+        normalize: true,
+        backend: 'MediaElement', // Faster loading, immediate playback
+        mediaControls: false,
+        // Optimizations for faster rendering
+        barGap: 1, // Smaller gaps between bars
+        minPxPerSec: 1, // Lower resolution for faster rendering
+        hideScrollbar: true
+      });
+
+      console.log('🎵 WAVESURFER PREVIEW: Created instance', wavesurfer);
+      wavesurferRef.current = wavesurfer;
+
+      // Event listeners
+      wavesurfer.on('ready', () => {
+        console.log('🎵 WAVESURFER PREVIEW: Ready');
+        setDuration(wavesurfer.getDuration());
+        setWaveformReady(true); // Enable play button
+      });
+
+      wavesurfer.on('load', () => {
+        console.log('🎵 WAVESURFER PREVIEW: Audio loaded, ready for playback');
+        // Audio is ready for playback even if waveform is still rendering
+      });
+
+      wavesurfer.on('audioprocess', (time) => {
+        setCurrentTime(time);
+      });
+
+      wavesurfer.on('play', () => {
+        console.log('🎵 WAVESURFER PREVIEW: Playing');
+        setIsPlaying(true);
+      });
+
+      wavesurfer.on('pause', () => {
+        console.log('🎵 WAVESURFER PREVIEW: Paused');
+        setIsPlaying(false);
+      });
+
+      wavesurfer.on('error', (error) => {
+        console.error('🎵 WAVESURFER PREVIEW: Error', error);
+        setWaveformReady(false); // Disable play button on error
+      });
+
+      // Load audio
+      console.log('🎵 WAVESURFER PREVIEW: Loading audio', resolvedAudioUrl);
+      wavesurfer.load(resolvedAudioUrl);
+    };
+
+    initWavesurfer();
+
+    // Cleanup
+    return () => {
+      if (wavesurferRef.current) {
+        wavesurferRef.current.destroy();
+        wavesurferRef.current = null;
+      }
+      setWaveformReady(false); // Reset ready state on cleanup
+    };
+  }, [resolvedAudioUrl, audioFetched]);
   const [splitPoints, setSplitPoints] = useState<number[]>([]);
   const [splitSegments, setSplitSegments] = useState<any[]>([]);
   const [showErrorPopup, setShowErrorPopup] = useState(false);
@@ -673,7 +770,7 @@ const AudioProcessor: React.FC = () => {
                           {trackTitle || 'Unknown Title'}
                 </div>
               </div>
-                      
+
                       <div className="flex-shrink-0">
                         <div className="text-xs text-gray-500 mb-1">Length</div>
                         <div className="text-gray-800 font-medium text-xs">
@@ -728,7 +825,8 @@ const AudioProcessor: React.FC = () => {
                 </div>
               )}
 
-              {/* Player Controls */}
+              {/* HTML5 Player Controls - COMMENTED OUT */}
+              {/* 
               <div className="flex items-center justify-between mb-6 gap-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
                 <button
                   onClick={togglePlay}
@@ -766,7 +864,6 @@ const AudioProcessor: React.FC = () => {
                       className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
                       style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
                     >
-                      {/* Slide switch handle */}
                       <div 
                         className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
                         style={{ 
@@ -782,7 +879,6 @@ const AudioProcessor: React.FC = () => {
                   {formatTime(currentTime)} / {formatTime(duration)}
                 </span>
 
-                {/* Volume */}
                 <div className="flex items-center gap-2 w-40">
                   <button 
                     onClick={toggleMute}
@@ -795,9 +891,7 @@ const AudioProcessor: React.FC = () => {
                     aria-label={isMuted ? "Unmute" : "Mute"}
                   >
                     <svg className={`w-5 h-5 ${isProcessing && !audioFetched ? 'text-gray-400' : 'text-gray-600'}`} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    {/* Speaker base */}
                     <path d="M5 9v6h4l5 4V5L9 9H5z"/>
-                    {/* Curvy volume level waves - only show when not muted and volume > 0 */}
                       {!isMuted && volume > 0 && (
                       <path 
                         d="M16 10c0-1.1.9-2 2-2s2 .9 2 2v4c0 1.1-.9 2-2 2s-2-.9-2-2v-4z" 
@@ -843,16 +937,87 @@ const AudioProcessor: React.FC = () => {
                       className="bg-gray-800 h-2 rounded-full transition-all duration-300 relative"
                       style={{ width: `${(isMuted ? 0 : volume) * 100}%` }}
                     >
-                      {/* Slide switch handle */}
                       <div 
                         className="absolute right-0 top-1/2 w-4 h-4 bg-gray-100 rounded-full shadow-sm border border-gray-300"
                         style={{ 
                           right: '-8px',
                           transform: 'translateY(-50%)'
                         }}
-                      />
-                    </div>
+                  />
+                </div>
+              </div>
+                </div>
+              </div>
+              */}
+
+              {/* Wavesurfer Player - Restored Working Version */}
+              <div className="mb-6">
+                <div 
+                  id="preview-wavesurfer-container"
+                  className="w-full rounded-lg border border-gray-200"
+                  style={{ height: '120px' }}
+                />
+                
+                {/* Loading Indicator */}
+                {!waveformReady && (
+                  <div className="flex items-center justify-center gap-2 mt-4 text-gray-500 text-sm">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Loading waveform...</span>
                   </div>
+                )}
+
+                {/* Custom Control Buttons - Working Version */}
+                <div className="flex items-center justify-center gap-4 mt-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <button
+                    onClick={() => {
+                      if (wavesurferRef.current) {
+                        if (isPlaying) {
+                          wavesurferRef.current.pause();
+                        } else {
+                          wavesurferRef.current.play();
+                        }
+                      }
+                    }}
+                    disabled={!wavesurferRef.current || !waveformReady}
+                    className={`transition-colors duration-300 focus:outline-none ${
+                      !wavesurferRef.current || !waveformReady
+                        ? 'text-gray-400 cursor-not-allowed' 
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    {isPlaying ? (
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                      </svg>
+                    ) : (
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z"/>
+                      </svg>
+                    )}
+                  </button>
+                  
+                  <span className="text-gray-600 text-sm min-w-[80px] text-center">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </span>
+                  
+                  <button
+                    onClick={() => {
+                      if (wavesurferRef.current) {
+                        wavesurferRef.current.stop();
+                        setCurrentTime(0);
+                      }
+                    }}
+                    disabled={!wavesurferRef.current || !waveformReady}
+                    className={`transition-colors duration-300 focus:outline-none ${
+                      !wavesurferRef.current || !waveformReady
+                        ? 'text-gray-400 cursor-not-allowed' 
+                        : 'text-gray-600 hover:text-gray-800'
+                    }`}
+                  >
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M6 6h12v12H6z"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
 
